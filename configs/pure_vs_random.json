@@ -1,0 +1,20 @@
+{
+  "_about": "Reproduces figures/Randoms_vs__Control.png. Run: python scripts/plot_channels.py configs/pure_vs_random.json",
+  "n": 300,
+  "parity": "odd",
+  "n_steps": 300,
+  "theta_0_expr": "pi/4",
+  "theta_0": 0.7853981633974483,
+  "seed": 42,
+  "channels": {
+    "pure": 0.0,
+    "discrete_coin": 0.39269908169872414,
+    "continuous_coin": 0.39269908169872414,
+    "random_translation": 0.5
+  },
+  "_control_parameters": {
+    "discrete_coin": "delta_theta = pi/8",
+    "continuous_coin": "delta_theta_max = pi/8",
+    "random_translation": "p_r"
+  }
+}

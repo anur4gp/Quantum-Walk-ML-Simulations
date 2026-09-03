@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Cached simulations (regenerable from config + seed; CLAUDE.md Sec. 6)
+data/*.npz
+
+# Tooling
+.pytest_cache/
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store

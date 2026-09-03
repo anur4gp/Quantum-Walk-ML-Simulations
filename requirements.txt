@@ -1,0 +1,9 @@
+# Stack fixed to match Paper A (CLAUDE.md Sec. 8, "Dependencies").
+# Ask before adding anything here -- in particular no PyTorch/JAX, and no
+# plotting library other than matplotlib.
+numpy>=1.26
+scipy>=1.11
+matplotlib>=3.8
+scikit-learn>=1.4
+tensorflow>=2.15
+pytest>=7.4

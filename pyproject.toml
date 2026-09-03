@@ -1,0 +1,6 @@
+# Tool configuration only -- this project is run from the source tree, not
+# installed as a package.
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

@@ -1,0 +1,74 @@
+# Quantum Walks with Classical Randomness — ML Localization Transition
+
+Computational physics project in the group of Dr. Chih-Chun Chien, Department of
+Physics, UC Merced. Discrete-time quantum walks with classical randomness, with
+supervised classifiers used to locate the delocalization → localization
+transition automatically.
+
+The specification is [`CLAUDE.md`](CLAUDE.md) and the two papers in
+[`papers/`](papers/). Where this README and `CLAUDE.md` disagree, `CLAUDE.md`
+wins.
+
+## Layout
+
+```
+src/qw/          physics: operators, evolution, randomness channels, observables
+src/qw/legacy/   pre-restructure walker.py / walker2N.py, kept as a reference
+src/data/        sample generation, labelling, caching, P_max normalization
+src/models/      classifiers (SVM, MLP, CNN) — share the base.Classifier protocol
+src/analysis/    critical-value extraction, scaling fits   [later phases]
+src/plotting/    shared matplotlib conventions
+scripts/         thin CLI entry points, no physics
+configs/         run configs; every figure regenerable from a config + seed
+tests/           pytest suite
+data/            cached .npz simulations (gitignored)
+figures/         publication-DPI output
+papers/          Paper A (PRE 108, 035308) and Paper B (PRE 110, 064124)
+```
+
+Physics lives in `src/qw/`, ML in `src/models/`. **They talk only through
+arrays** — no model imports a walk simulator.
+
+## Setup
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Python 3.11+. The stack is pinned to Paper A's (`numpy`, `scipy`, `matplotlib`,
+`scikit-learn`, `tensorflow`, `pytest`); ask before adding to it.
+
+## Running
+
+```bash
+pytest                                                    # 65 tests
+python scripts/plot_channels.py configs/pure_vs_random.json
+python scripts/plot_channels.py configs/pure_vs_random.json --save my_figure
+```
+
+`pytest` resolves `src/` via `pythonpath` in `pyproject.toml`; scripts insert it
+themselves.
+
+## Status
+
+Phase 1 (classifiers in isolation) — see `CLAUDE.md` §10 for the checklist.
+
+| Piece | State |
+|---|---|
+| `src/qw/` operators, walk, randomness, observables | done, tested |
+| `src/data/preprocess.py` (`P_max = 1`) | done, tested |
+| `src/plotting/style.py` | done |
+| `src/models/base.py` protocol | done |
+| `src/models/{svm,mlp,cnn}.py` | spec only, not implemented |
+| `src/data/generate.py` | spec only, not implemented |
+| `src/analysis/` | later phases |
+
+## Conventions worth knowing before reading the code
+
+- A state is a `(L, 2)` `complex128` array; columns are `(+, -)`.
+- Lattice parity is always an explicit parameter. Paper A: odd, `2N+1` sites,
+  centred on `x = 0`. Paper B: even, `2N` sites, no `x = 0`.
+- Randomness is drawn up front into a `Schedule`, never inside the evolution
+  loop. Every function that draws takes an explicit `rng`.
+- Labels: `0 = delocalized`, `1 = localized`. Never flipped.

@@ -1,5 +1,17 @@
 # Archived exercises
 
+"""Pre-restructure script, kept verbatim apart from the import shim below.
+
+Superseded by scripts/plot_channels.py, which drives the ported physics in
+src/qw/ from a config file.
+"""
+
+import sys
+from pathlib import Path
+
+# Kept runnable after the restructure: walker.py now lives in src/qw/legacy/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "qw" / "legacy"))
+
 from walker import Walker
 import numpy as np
 import matplotlib.pyplot as plt
