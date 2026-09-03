@@ -1,19 +1,3 @@
-"""Linear SVM classifier (Paper A, Sec. III B 1).
-
-Spec (CLAUDE.md Sec. 7.1):
-
-* ``sklearn`` linear ``SGDClassifier``
-* loss ``modified_huber`` -- *not* hinge. Hinge gives hard true/false output;
-  modified Huber yields calibrated binary probabilities, which the Phase 2
-  confusion-point method depends on.
-
-A word on what a good score here means. The two training classes are
-one-peak versus two-peak distributions, which are trivially separable, so
-near-perfect test accuracy is the *expected* baseline even at small sample
-size. It demonstrates that the pipeline is not broken and nothing more. Do
-not report it as a result.
-"""
-
 from __future__ import annotations
 
 import numpy as np
@@ -23,23 +7,6 @@ from data.preprocess import normalize_pmax
 
 
 class SVMClassifier:
-    """Linear SVM over probability distributions, implementing ``base.Classifier``.
-
-    Parameters
-    ----------
-    normalize
-        Apply the ``P_max = 1`` ML normalisation (Paper A, Sec. III B 4). Kept
-        on by default for all three classifiers; it is a flag, not a hardcode.
-        Applied inside both :meth:`fit` and :meth:`predict_proba`, so training
-        and inference can never disagree about it. Paper A found this makes no
-        difference to the SVM specifically -- it matters for the MLP and CNN.
-    alpha
-        L2 regularisation strength passed to ``SGDClassifier``.
-    max_iter, tol
-        ``SGDClassifier`` convergence controls.
-    random_state
-        Seeds sklearn. Required for reproducibility (CLAUDE.md Sec. 8).
-    """
 
     def __init__(
         self,
