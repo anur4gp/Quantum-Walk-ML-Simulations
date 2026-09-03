@@ -45,7 +45,13 @@ Python 3.11+. The stack is pinned to Paper A's (`numpy`, `scipy`, `matplotlib`,
 pytest                                                    # 65 tests
 python scripts/plot_channels.py configs/pure_vs_random.json
 python scripts/plot_channels.py configs/pure_vs_random.json --save my_figure
+
+python scripts/train_svm.py configs/svm_discrete_coin.json          # train + report
+python scripts/train_svm.py configs/svm_discrete_coin.json --plot    # + learned weights
 ```
+
+`train_svm.py` takes `--channel/--n/--n-samples/--seed/--no-normalize` overrides
+for quick exploration; put anything you intend to quote in a config instead.
 
 `pytest` resolves `src/` via `pythonpath` in `pyproject.toml`; scripts insert it
 themselves.
@@ -60,8 +66,9 @@ Phase 1 (classifiers in isolation) — see `CLAUDE.md` §10 for the checklist.
 | `src/data/preprocess.py` (`P_max = 1`) | done, tested |
 | `src/plotting/style.py` | done |
 | `src/models/base.py` protocol | done |
-| `src/models/{svm,mlp,cnn}.py` | spec only, not implemented |
-| `src/data/generate.py` | spec only, not implemented |
+| `src/models/svm.py` | done, tested — 100% on all three channels |
+| `src/data/generate.py` | labelling done, tested; **`.npz` caching not yet built** |
+| `src/models/{mlp,cnn}.py` | spec only, not implemented |
 | `src/analysis/` | later phases |
 
 ## Conventions worth knowing before reading the code
@@ -72,3 +79,8 @@ Phase 1 (classifiers in isolation) — see `CLAUDE.md` §10 for the checklist.
 - Randomness is drawn up front into a `Schedule`, never inside the evolution
   loop. Every function that draws takes an explicit `rng`.
 - Labels: `0 = delocalized`, `1 = localized`. Never flipped.
+- `generate.py` returns samples with physical normalization (`sum P = 1`); the
+  `P_max = 1` ML normalization is applied inside the classifier, so one flag
+  covers both training and inference.
+- Training windows have no defaults. They are a recorded result, not an
+  implementation detail — the ones in `configs/svm_*.json` are placeholders.

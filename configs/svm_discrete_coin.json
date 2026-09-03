@@ -1,0 +1,23 @@
+{
+  "_about": "SVM on the discrete random rotation channel. Run: python3 scripts/train_svm.py configs/svm_discrete_coin.json",
+
+  "n": 80,
+  "parity": "odd",
+  "channel": "discrete_coin",
+  "theta_0_expr": "pi/6",
+  "theta_0": 0.5235987755982988,
+
+  "_windows_note": "PLACEHOLDER. Training-window selection is a research decision and a recorded result, not an implementation detail (CLAUDE.md Sec. 6). These are set far from the transition so the two classes are unambiguous; tune before quoting any number from this run.",
+  "window_delocalized": [0.0, 0.05],
+  "window_localized": [0.45, 0.5235987755982988],
+
+  "n_samples": 1800,
+  "test_size": 0.2,
+  "seed": 0,
+
+  "normalize_pmax": true,
+  "alpha": 0.0001,
+  "max_iter": 1000,
+  "tol": 0.001,
+  "random_state": 0
+}
