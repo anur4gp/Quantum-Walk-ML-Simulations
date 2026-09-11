@@ -21,6 +21,7 @@ src/plotting/    shared matplotlib conventions
 scripts/         thin CLI entry points, no physics
 configs/         run configs; every figure regenerable from a config + seed
 tests/           pytest suite
+notes/           project reference sheet (LaTeX) and the progress log
 data/            cached .npz simulations (gitignored)
 figures/         publication-DPI output
 papers/          Paper A (PRE 108, 035308) and Paper B (PRE 110, 064124)
@@ -42,16 +43,26 @@ Python 3.11+. The stack is pinned to Paper A's (`numpy`, `scipy`, `matplotlib`,
 ## Running
 
 ```bash
-pytest                                                    # 65 tests
+pytest                                                    # 117 tests
 python scripts/plot_channels.py configs/pure_vs_random.json
 python scripts/plot_channels.py configs/pure_vs_random.json --save my_figure
 
 python scripts/train_svm.py configs/svm_discrete_coin.json          # train + report
 python scripts/train_svm.py configs/svm_discrete_coin.json --plot    # + learned weights
+
+python scripts/train_mlp.py                              # default regime, train + report
+python scripts/train_mlp.py --list                       # available regimes and grids
+python scripts/train_mlp.py --regime continuous_coin --plot
+python scripts/train_mlp.py --grid coarse                # exhaustive GridSearchCV
+python scripts/train_mlp.py --all                        # every regime, summary table
+
+python scripts/legacy_classical_walk.py                  # classical vs quantum reference
 ```
 
 `train_svm.py` takes `--channel/--n/--n-samples/--seed/--no-normalize` overrides
 for quick exploration; put anything you intend to quote in a config instead.
+`train_mlp.py` works the same way, but its testing regimes are named entries in
+a `REGIMES` dict at the top of the script rather than separate config files.
 
 `pytest` resolves `src/` via `pythonpath` in `pyproject.toml`; scripts insert it
 themselves.
@@ -67,8 +78,9 @@ Phase 1 (classifiers in isolation) — see `CLAUDE.md` §10 for the checklist.
 | `src/plotting/style.py` | done |
 | `src/models/base.py` protocol | done |
 | `src/models/svm.py` | done, tested — 100% on all three channels |
+| `src/models/mlp.py` | done, tested — 100% on all three channels; `GridSearchCV`-ready |
 | `src/data/generate.py` | labelling done, tested; **`.npz` caching not yet built** |
-| `src/models/{mlp,cnn}.py` | spec only, not implemented |
+| `src/models/cnn.py` | spec only, not implemented |
 | `src/analysis/` | later phases |
 
 ## Conventions worth knowing before reading the code

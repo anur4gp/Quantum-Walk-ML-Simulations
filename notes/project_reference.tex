@@ -1,0 +1,799 @@
+% =====================================================================
+%  project_reference.tex
+%
+%  A LaTeX-safe reference sheet for the quantum-walk / machine-learning
+%  project.  It is NOT the thesis.  It is the thing you open in a second
+%  window while writing the thesis, so that every definition, convention,
+%  number and caveat is in one place, already typeset, already labelled.
+%
+%  HOW TO USE IT
+%  -------------
+%  * Compile standalone:      pdflatex notes/project_reference.tex
+%    (Requires only amsmath, amssymb, booktabs, geometry, hyperref,
+%     xcolor, longtable -- all in a standard TeX Live / MacTeX install.)
+%
+%  * Reuse a single equation in the thesis: every numbered equation has a
+%    \label{eq:...}.  Copy the equation body across, or \input this file
+%    and \eqref the label.
+%
+%  * Reuse the macros: the block marked "MACRO BLOCK" below is meant to be
+%    copied verbatim into the thesis preamble.  Then notation is identical
+%    in both documents and cannot drift.
+%
+%  * Find things fast: every reusable chunk is delimited by a comment of
+%    the form
+%          % >>> BLOCK: name
+%          ...
+%          % <<< END BLOCK: name
+%    so   grep -n "BLOCK:" notes/project_reference.tex
+%    prints a table of contents from the shell.
+%
+%  * Section \ref{sec:writeup-map} maps each stage of the write-up onto the
+%    sections of this file, so you do not have to remember where anything is.
+%
+%  MAINTENANCE
+%  -----------
+%  Results tables in Sections \ref{sec:reproduced} and \ref{sec:observations}
+%  are the living part of this document.  Add a row when a number is
+%  produced; always record the config and seed alongside it, per CLAUDE.md
+%  Sec. 9 ("Numerical claims need provenance").  The engineering log --
+%  what broke, what was tried, what was decided -- lives in
+%  notes/PROGRESS.md, not here.
+% =====================================================================
+
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+
+% >>> BLOCK: macros
+% ---------------------------------------------------------------------
+% MACRO BLOCK -- copy this verbatim into the thesis preamble.
+% Defining notation once, here, is what stops \Delta\theta_M and
+% \Delta\theta_{max} from both appearing in the same document.
+% ---------------------------------------------------------------------
+\newcommand{\dtheta}{\Delta\theta}                  % discrete rotation strength
+\newcommand{\dthetaM}{\Delta\theta_{M}}             % continuous rotation bound
+\newcommand{\dthetac}{\Delta\theta_{c}}             % critical rotation strength
+\newcommand{\Prand}{P_{r}}                          % inverse-translation probability
+\newcommand{\Prandc}{P_{r,c}}                       % critical inverse-translation prob.
+\newcommand{\Cop}{\hat{C}}                          % coin operator
+\newcommand{\Top}{\hat{T}}                          % translation operator
+\newcommand{\Tinv}{\hat{T}^{-1}}                    % inverse translation
+\newcommand{\ket}[1]{\lvert #1 \rangle}
+\newcommand{\bra}[1]{\langle #1 \rvert}
+\newcommand{\braket}[2]{\langle #1 \vert #2 \rangle}
+\newcommand{\MoI}{\mathrm{MoI}}
+\newcommand{\IPR}{\mathrm{IPR}}
+\newcommand{\ES}{\mathit{ES}}
+\newcommand{\Tr}{\operatorname{Tr}}
+\newcommand{\Pdeloc}{P(\text{deloc})}
+% Editorial marker: things that are inferred or provisional, never claimed.
+\newcommand{\provisional}[1]{\textcolor{red}{[provisional: #1]}}
+% <<< END BLOCK: macros
+
+\title{Quantum Walks with Classical Randomness:\\
+       Project Reference Sheet}
+\author{Anurag Paudel \\ \small Group of Dr.\ Chih-Chun Chien, Department of Physics, UC Merced}
+\date{Last updated: 8 September 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% =====================================================================
+\section{How this maps onto the write-up}
+\label{sec:writeup-map}
+% =====================================================================
+
+\begin{longtable}{p{0.36\textwidth} p{0.56\textwidth}}
+\toprule
+\textbf{When you are writing\dots} & \textbf{Pull from\dots} \\
+\midrule
+\endhead
+Introduction / motivation
+  & Sec.~\ref{sec:phenomenology} (what the transition looks like) and
+    Sec.~\ref{sec:published} (what is already known). \\
+Model and methods -- the walk
+  & Sec.~\ref{sec:walk}, Sec.~\ref{sec:lattice}. Equations
+    \eqref{eq:state}--\eqref{eq:evolution}. \\
+Model and methods -- randomness
+  & Sec.~\ref{sec:channels}. One subsection per channel, with the control
+    parameter and its range. \\
+Model and methods -- manual diagnostics
+  & Sec.~\ref{sec:observables}. Equations
+    \eqref{eq:prob}--\eqref{eq:ipr}. \\
+Model and methods -- classifiers
+  & Sec.~\ref{sec:classifiers}, including the two \emph{different}
+    critical-point rules in Sec.~\ref{sec:critical}. \\
+Data / reproducibility statement
+  & Sec.~\ref{sec:data-contract}. \\
+Results -- Phase 1
+  & Sec.~\ref{sec:reproduced}, Table~\ref{tab:phase1}. \\
+Results -- Phases 2--3
+  & Sec.~\ref{sec:reproduced}, Table~\ref{tab:exponents} (fill in against
+    Paper~A's Table~I). \\
+Discussion -- the new science
+  & Sec.~\ref{sec:observations}, and the random-translation failure mode in
+    Sec.~\ref{sec:published}. \\
+Figures
+  & Sec.~\ref{sec:figures}. \\
+\bottomrule
+\end{longtable}
+
+\noindent
+\textbf{Sourcing rule.} Where this sheet states something the two papers
+state, it is a citation. Where it states something measured in this project,
+the table row carries the config and seed. Anything neither of those is
+marked \provisional{like this} and must not be carried into the thesis
+without checking.
+
+% =====================================================================
+\section{The walk}
+\label{sec:walk}
+% =====================================================================
+
+% >>> BLOCK: state
+A walker on a one-dimensional lattice carries two internal (``coin'' or
+``spin'') states $\ket{+}$ and $\ket{-}$:
+\begin{equation}
+\ket{\psi} = \sum_{x}\left( \alpha_{x,+}\ket{x,+} + \alpha_{x,-}\ket{x,-} \right).
+\label{eq:state}
+\end{equation}
+% <<< END BLOCK: state
+
+% >>> BLOCK: coin
+The coin (rotation) operator is
+\begin{equation}
+\Cop(\theta,\phi_1,\phi_2) =
+\begin{pmatrix}
+\cos\theta & e^{i\phi_1}\sin\theta \\[2pt]
+e^{i\phi_2}\sin\theta & -e^{i(\phi_1+\phi_2)}\cos\theta
+\end{pmatrix}.
+\label{eq:coin-general}
+\end{equation}
+Throughout both papers $\phi_1 = \phi_2 = \pi/2$, which reduces
+\eqref{eq:coin-general} to the symmetric form
+\begin{equation}
+\Cop(\theta) =
+\begin{pmatrix}
+\cos\theta & i\sin\theta \\[2pt]
+i\sin\theta & \cos\theta
+\end{pmatrix}.
+\label{eq:coin}
+\end{equation}
+The default base angle is $\theta_0 = \pi/6$. Paper~A confirms that
+$\dthetac$ is insensitive to $\theta_0$ provided $\theta_0$ is away from $0$
+and from odd multiples of $\pi/2$.
+% <<< END BLOCK: coin
+
+% >>> BLOCK: translation
+The conventional translation operator moves the two spin components in
+opposite directions,
+\begin{equation}
+\Top\ket{\psi_x,+} = \ket{\psi_{x+1},+},
+\qquad
+\Top\ket{\psi_x,-} = \ket{\psi_{x-1},-},
+\label{eq:translation}
+\end{equation}
+and its inverse, needed for the random-translation channel, is
+\begin{equation}
+\Tinv\ket{\psi_x,+} = \ket{\psi_{x-1},+},
+\qquad
+\Tinv\ket{\psi_x,-} = \ket{\psi_{x+1},-}.
+\label{eq:translation-inverse}
+\end{equation}
+% <<< END BLOCK: translation
+
+% >>> BLOCK: evolution
+The state after $N$ time steps is
+\begin{equation}
+\ket{\psi(t)} = \left(\Top\,\Cop\right)^{N} \ket{\psi_0},
+\label{eq:evolution}
+\end{equation}
+i.e.\ the coin acts \emph{first} at each step, then the translation.
+% <<< END BLOCK: evolution
+
+\paragraph{Parity of the support.}
+Every step changes $x$ by exactly $\pm 1$, so after $N$ steps only sites with
+the same parity as $N$ carry amplitude; the remaining half of the lattice is
+identically zero. This is a property of the walk, not an artefact. It is why
+raw $P(x)$ plots look like a comb, and why comparison figures are usually
+drawn on the reachable sub-lattice only.
+
+% =====================================================================
+\section{Lattice conventions}
+\label{sec:lattice}
+% =====================================================================
+
+% >>> BLOCK: lattice-table
+The two source papers use \emph{different} lattices. Mixing them is the
+single most likely source of a silent bug.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+ & \textbf{Paper A} (PRE \textbf{108}, 035308) & \textbf{Paper B} (PRE \textbf{110}, 064124) \\
+\midrule
+Lattice       & odd, $2N+1$ sites, centred on $x=0$ & even, $2N$ sites, no $x=0$ \\
+Initial state & $\tfrac{1}{\sqrt{2}}\left(\ket{0,+}+\ket{0,-}\right)$
+              & $\sum_{x=\pm 1,\ \sigma=\pm}\tfrac{1}{2}\ket{x,\sigma}$ \\
+Max steps     & $N$ & $N-1$ (conventional / symmetric), $N/2-1$ (split-step) \\
+\bottomrule
+\end{tabular}
+\caption{Lattice conventions. Paper~B requires the even lattice because its
+symmetric and split-step translation operators are \emph{not unitary} on a
+lattice containing a central $x=0$ site.}
+\label{tab:lattice}
+\end{table}
+
+\noindent
+\textbf{This project follows Paper~A} -- odd lattice, centred initial state,
+conventional walk -- because that is the localization-transition setting.
+Lattice parity is an explicit parameter in the code, never hardcoded.
+% <<< END BLOCK: lattice-table
+
+% =====================================================================
+\section{Channels of classical randomness}
+\label{sec:channels}
+% =====================================================================
+
+All three channels below are \emph{temporal}: the randomness is redrawn at
+every time step and is uniform in space. Paper~B additionally treats
+\emph{spatially dependent} randomness, drawn once per site and frozen in
+time; that is out of scope for the current phase.
+
+% >>> BLOCK: channel-discrete
+\subsection{Discrete random rotation}
+\label{sec:ch-discrete}
+Two coin operators, with angles
+\begin{equation}
+\theta_{1,2} = \theta_0 \pm \dtheta ,
+\label{eq:discrete-coin}
+\end{equation}
+and at each time step a \emph{fair} classical coin selects one, with
+$P(\theta_1)=P(\theta_2)=1/2$. The fairness is part of the definition of the
+channel and is not a free parameter.
+
+\noindent Control parameter: $\dtheta$, scanned over $0 \le \dtheta \le \theta_0$.
+Beyond $\theta_0$ one of the two angles goes negative, which is a different walk.
+% <<< END BLOCK: channel-discrete
+
+% >>> BLOCK: channel-continuous
+\subsection{Continuous random rotation}
+\label{sec:ch-continuous}
+A single coin whose angle is redrawn each step,
+\begin{equation}
+\theta(t) = \theta_0 + \dtheta(t),
+\qquad
+\dtheta(t) \sim \mathrm{Uniform}\!\left(0,\ \dthetaM\right).
+\label{eq:continuous-coin}
+\end{equation}
+Note the support is \emph{one-sided}, $[0,\dthetaM)$, not symmetric about
+$\theta_0$.
+
+\noindent Control parameter: $\dthetaM$.
+% <<< END BLOCK: channel-continuous
+
+% >>> BLOCK: channel-translation
+\subsection{Random translation}
+\label{sec:ch-translation}
+One fixed coin. At each time step the inverse translation
+\eqref{eq:translation-inverse} is applied with probability $\Prand$ in place
+of $\Top$.
+
+\noindent Control parameter: $\Prand \in [0,0.5]$. Above $0.5$ the walk is
+mirror-symmetric to $1-\Prand$ by parity, so scanning past $0.5$ duplicates
+rather than extends.
+% <<< END BLOCK: channel-translation
+
+% >>> BLOCK: channel-naming
+\subsection{Naming}
+\label{sec:ch-naming}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Figure label} & \textbf{Formal name} & \textbf{Code key} \\
+\midrule
+Pure QW          & no classical randomness      & \texttt{pure} \\
+Jittered         & discrete random rotation     & \texttt{discrete\_coin} \\
+Uniform Jittered & continuous random rotation   & \texttt{continuous\_coin} \\
+Random Transform & random translation           & \texttt{random\_translation} \\
+\bottomrule
+\end{tabular}
+\caption{The three naming systems in play. Figure labels are the shorthand
+used in the existing plots; use the formal names in prose.}
+\label{tab:naming}
+\end{table}
+
+\noindent
+Line styles, kept fixed across every figure in the project so that plots from
+different runs remain comparable: pure = blue solid, discrete = red dashed,
+continuous = green dotted, random translation = purple dash-dotted. The
+classical random walk (Sec.~\ref{sec:classical}) is drawn black dashed.
+% <<< END BLOCK: channel-naming
+
+% =====================================================================
+\section{What the transition looks like}
+\label{sec:phenomenology}
+% =====================================================================
+
+% >>> BLOCK: phenomenology
+\begin{itemize}
+  \item \textbf{Weak randomness $\Rightarrow$ delocalized.} The signature
+        two-peak ballistic distribution; $\MoI \propto N^{2}$.
+  \item \textbf{Strong randomness $\Rightarrow$ localized.} A single central
+        peak: Gaussian-like for time-dependent randomness, exponential for
+        spatially dependent randomness.
+  \item \textbf{At the transition:} the discrete and continuous rotation
+        channels \emph{flatten out}; the random-translation channel instead
+        develops a \emph{three-peak} structure, a central peak coexisting
+        with the two ballistic side peaks.
+\end{itemize}
+
+\noindent
+That three-peak structure is exactly what defeated the neural-network methods
+in Paper~A. It is expected behaviour of the physics, not a numerical fault.
+% <<< END BLOCK: phenomenology
+
+% =====================================================================
+\section{Manual (baseline) observables}
+\label{sec:observables}
+% =====================================================================
+
+These are the ground-truth comparators against which the classifiers are
+judged.
+
+% >>> BLOCK: obs-prob
+\subsection{Probability distribution}
+\begin{equation}
+P(x) = \left|\psi_{+}(x)\right|^{2} + \left|\psi_{-}(x)\right|^{2}.
+\label{eq:prob}
+\end{equation}
+The transition is located by eye, from the onset of flattening or of the
+three-peak structure. This is the ``Human'' row of Table~\ref{tab:exponents}.
+% <<< END BLOCK: obs-prob
+
+% >>> BLOCK: obs-moi
+\subsection{Moment of inertia}
+\begin{equation}
+\MoI(t) = \sum_{x} x^{2} P(x,t).
+\label{eq:moi}
+\end{equation}
+A delocalized walk gives $\MoI \propto N^{2}$. The critical value is read off
+as the \emph{kink} at which $\MoI$ departs from that scaling.
+% <<< END BLOCK: obs-moi
+
+% >>> BLOCK: obs-ipr
+\subsection{Inverse participation ratio}
+\begin{equation}
+\IPR = \frac{\left(\sum_{x}\left|\psi_{+}(x)\right|^{2}\right)^{2}}
+            {\sum_{x}\left|\psi_{+}(x)\right|^{4}},
+\qquad \psi_{+}(x) \equiv \braket{x,+}{\psi}.
+\label{eq:ipr}
+\end{equation}
+Paper~A writes the numerator and denominator in a bra--ket shorthand; the
+form above is the same quantity written unambiguously, and is what the code
+in \texttt{src/qw/observables.py} computes.
+Two things about this definition are deliberate and must not be
+``tidied up'':
+\begin{enumerate}
+  \item it is built from the \textbf{spin-up component only}, not from the
+        total $P(x)$;
+  \item it is in the \emph{participation ratio} orientation, so it grows as
+        the distribution flattens and the critical value is its
+        \textbf{maximum}.
+\end{enumerate}
+The IPR \textbf{cannot} distinguish a one-peak from a two-peak distribution.
+It only flags flatness. Do not oversell it in the write-up.
+% <<< END BLOCK: obs-ipr
+
+% >>> BLOCK: obs-classical
+\subsection{Classical baseline}
+\label{sec:classical}
+For contrast, the unbiased classical random walk on the same lattice has the
+exact binomial distribution
+\begin{equation}
+P_{\mathrm{cl}}(x) = \binom{N}{k} p^{k}(1-p)^{N-k},
+\qquad k = \frac{x+N}{2},
+\label{eq:classical}
+\end{equation}
+zero on sites of the wrong parity, and for $p=1/2$ satisfies exactly
+\begin{equation}
+\MoI_{\mathrm{cl}} = \sum_x x^2 P_{\mathrm{cl}}(x) = N .
+\label{eq:classical-moi}
+\end{equation}
+So the classical walk spreads \emph{diffusively}, $\sigma \sim \sqrt{N}$,
+against the quantum walk's \emph{ballistic} $\sigma \sim N$. This is the
+one-line statement of why the quantum walk is interesting, and equally the
+statement of what strong classical randomness destroys.
+% <<< END BLOCK: obs-classical
+
+% =====================================================================
+\section{Entanglement quantities (Paper B; later phase)}
+\label{sec:entanglement}
+% =====================================================================
+
+% >>> BLOCK: entanglement
+Not used in the current phase; recorded here so the conventions are fixed
+before they are needed.
+
+Entanglement entropy, from the reduced spin density matrix
+$\rho_s = \Tr_x \rho_{\mathrm{tot}}$ with eigenvalues $\lambda_\pm$:
+\begin{equation}
+\ES(t) = -\Tr_{s}\!\left(\rho_s \ln \rho_s\right)
+       = -\lambda_{+}\ln\lambda_{+} - \lambda_{-}\ln\lambda_{-}.
+\label{eq:es}
+\end{equation}
+\textbf{Natural logarithm}, base $e$. Results in the literature quoted in
+base 2 differ by a factor $\ln 2 \approx 0.69$; say which you are using.
+
+The classical proxy (``overlap'') is
+\begin{equation}
+O(t) = \sum_{x} P_{+}(x,t)\, P_{-}(x,t),
+\label{eq:overlap}
+\end{equation}
+which tracks the \emph{inverse} of $\ES$. Steady-state values of both are
+long-time averages taken after transients have died away.
+% <<< END BLOCK: entanglement
+
+% =====================================================================
+\section{Data contract}
+\label{sec:data-contract}
+% =====================================================================
+
+% >>> BLOCK: data-contract
+\begin{itemize}
+  \item \textbf{One sample} $=$ the final-time probability distribution of one
+        walk realization; shape $(2N+1,)$ on the Paper~A odd lattice.
+  \item \textbf{One realization} $=$ one draw of the classical randomness,
+        evolved to fixed $N$ (Monte Carlo over the classical coin).
+  \item \textbf{Metadata} carried with every sample: channel, $\theta_0$, $N$,
+        control value, seed.
+  \item \textbf{Labels:} $0 = $ delocalized (weak randomness),
+        $1 = $ localized (strong randomness). Never flipped.
+  \item \textbf{Physical normalization:} $\sum_x P(x) = 1$.
+  \item \textbf{ML normalization:} $P_{\max} = 1$, i.e.\ each distribution is
+        divided by its own maximum, matching the image-recognition
+        convention. Applied to \emph{both} training and inference data.
+        Paper~A found this makes no difference to the SVM but substantially
+        reduces variance for the MLP and CNN.
+  \item \textbf{Sample size:} $1800$ training samples (estimates are stable
+        from about $2000$; more gave no visible improvement).
+        Train/test split $80/20$.
+\end{itemize}
+
+\paragraph{Training-window selection is a result, not a setting.}
+The two labelled classes are drawn from ranges of the control parameter at
+the two extremes. Too narrow, and the classes carry too little information
+about the configurations; too wide, and transition-regime data leaks into
+training and corrupts the critical-value estimate. The chosen windows must be
+recorded and reported alongside any critical value derived from them.
+% <<< END BLOCK: data-contract
+
+% =====================================================================
+\section{Classifiers}
+\label{sec:classifiers}
+% =====================================================================
+
+All three expose the same interface: \texttt{fit}, \texttt{predict\_proba}
+returning genuine two-class probabilities of shape $(n,2)$, and
+\texttt{score}. Genuine probabilities are non-negotiable: the entire
+critical-point method in Sec.~\ref{sec:critical} is built on them.
+
+% >>> BLOCK: clf-svm
+\subsection{SVM}
+Linear \texttt{SGDClassifier}, with \textbf{modified Huber} loss --- not
+hinge. Hinge produces a hard true/false decision; modified Huber yields
+calibrated binary probabilities.
+
+\noindent
+\emph{Expected behaviour:} near-perfect test accuracy even at small sample
+size. This is not evidence of anything except a working pipeline: at the two
+extremes the problem is one-peak versus two-peak and is trivially separable.
+Say so explicitly in the write-up rather than reporting it as a success.
+% <<< END BLOCK: clf-svm
+
+% >>> BLOCK: clf-mlp
+\subsection{MLP}
+\texttt{MLPClassifier}. Six layers in total:
+\begin{equation*}
+\text{input (sized to the lattice)} \rightarrow 400 \rightarrow 200
+\rightarrow 100 \rightarrow 50 \rightarrow \text{output } 2 ,
+\end{equation*}
+with regularization $\alpha = 0.001$. Hyperparameters were explored with an
+exhaustive grid search (\texttt{GridSearchCV}) over the hidden layer sizes
+and $\alpha$. The layer sizes were held \emph{fixed} from $N=80$ to $N=1000$;
+scaling them with lattice size gave negligible improvement.
+
+\paragraph{Implementation caveat.} \texttt{scikit-learn}'s
+\texttt{MLPClassifier} uses a \emph{single} logistic output unit for a binary
+problem rather than two softmax units. This is equivalent up to
+reparametrization, and \texttt{predict\_proba} still returns the required
+$(n,2)$, but it is not literally the two-neuron output layer drawn in
+Paper~A. Worth one sentence in the methods section.
+% <<< END BLOCK: clf-mlp
+
+% >>> BLOCK: clf-cnn
+\subsection{CNN}
+TensorFlow/Keras. Four one-dimensional convolutional layers, then a dense
+layer with 2 neurons and a softmax.
+\begin{itemize}
+  \item Filter counts scale with lattice size: layer 1 has $2N+1$ filters,
+        then half, quarter, eighth (rounding up).
+  \item Kernel size 3, chosen because the lattice size is odd, so no padding
+        is needed.
+  \item Dropout after each layer: $0.5$, $0.5$, then $0.2$ on the final layer.
+  \item Loss: sparse categorical cross-entropy; 10 epochs.
+  \item \textbf{Random translation only:} add $L_2$ kernel regularization
+        with $\lambda = 0.01$ on every layer. This was needed to control
+        overfitting on the more varied distributions, and helped most at
+        smaller $N$ ($80$--$500$).
+\end{itemize}
+Because the filter counts depend on $N$, the model must be retrained for each
+lattice size. The network \emph{structure} stays fixed.
+% <<< END BLOCK: clf-cnn
+
+% >>> BLOCK: critical
+\subsection{Critical-point extraction}
+\label{sec:critical}
+After training on the two extreme regimes, intermediate-randomness data is fed
+in and the transition read off. \textbf{The rule differs by method, and the
+asymmetry is deliberate:}
+\begin{itemize}
+  \item \textbf{SVM:} the point of \emph{maximal confusion}, where the two
+        class probabilities are equal.
+  \item \textbf{MLP and CNN:} these show a \emph{sudden jump} rather than a
+        gradual crossover, so the estimate is the \emph{first} point at which
+        $\Pdeloc$ falls below $50\%$.
+\end{itemize}
+
+\noindent
+\textbf{Known artefact.} The ML methods estimate the critical value from a
+small \emph{range} around the transition rather than from a single point.
+This is the suspected cause of their systematically lower scaling exponents,
+and should be stated as a limitation.
+% <<< END BLOCK: critical
+
+% =====================================================================
+\section{Published results to reproduce}
+\label{sec:published}
+% =====================================================================
+
+% >>> BLOCK: table-paperA
+Power-law exponents of the critical randomness against system size,
+$\dthetac \sim N^{-\alpha}$, from Paper~A, Table~I.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Method} & $\dthetac$ (discrete) & $\dthetac$ (continuous) & $\Prandc$ \\
+\midrule
+SVM    & $0.36 \pm 0.04$ & $0.25 \pm 0.02$ & $\phantom{-}0.28 \pm 0.04$ \\
+MLP NN & $0.32 \pm 0.02$ & $0.25 \pm 0.01$ & $\phantom{-}0.07 \pm 0.06$ \\
+CNN    & $0.39 \pm 0.07$ & $0.32 \pm 0.04$ & $-0.08 \pm 0.06$ \\
+MoI    & $0.62 \pm 0.02$ & $0.36 \pm 0.02$ & $\phantom{-}0.51 \pm 0.04$ \\
+Human  & $0.32 \pm 0.01$ & $0.36 \pm 0.01$ & $\phantom{-}0.69 \pm 0.03$ \\
+IPR    & $0.46 \pm 0.02$ & $0.41 \pm 0.01$ & $\phantom{-}0.52 \pm 0.02$ \\
+\bottomrule
+\end{tabular}
+\caption{Paper~A, Table~I. Scaling exponents $\alpha$ in $\dthetac \sim N^{-\alpha}$.}
+\label{tab:paperA}
+\end{table}
+% <<< END BLOCK: table-paperA
+
+% >>> BLOCK: failure-mode
+\paragraph{The known failure mode, and why it is the opening.}
+For random translation the MLP and CNN deviate systematically from the manual
+methods --- the CNN exponent even goes negative. Paper~A tried splitting the
+distribution into three spatial regions ($-N<x<-N/2$, $-N/2<x<N/2$,
+$N/2<x<N$) and training on each separately, and found \emph{no improvement}.
+That experiment does not need repeating.
+
+This failure is the scientific opening for the present work. If a different
+architecture or a different input representation fixes the random-translation
+exponent, that is the result. It is a target, not a bug to be papered over.
+% <<< END BLOCK: failure-mode
+
+% =====================================================================
+\section{Reproduced results (living record)}
+\label{sec:reproduced}
+% =====================================================================
+
+% >>> BLOCK: table-phase1
+\subsection{Phase 1 --- classifiers in isolation}
+
+Classification accuracy on the two \emph{extreme} regimes only. These numbers
+establish that the pipeline is sound; they are not a physics result, because
+the two classes are trivially separable at the extremes.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llccccc}
+\toprule
+\textbf{Model} & \textbf{Channel} & $N$ & \textbf{Samples} & \textbf{Train} & \textbf{Test} & \textbf{Provenance} \\
+\midrule
+SVM & discrete    & 80 & 1800 & --- & $1.0000$ & \texttt{configs/svm\_discrete\_coin.json} \\
+SVM & continuous  & 80 & 1800 & --- & $1.0000$ & \texttt{configs/svm\_continuous\_coin.json} \\
+SVM & random tr.  & 80 & 1800 & --- & $1.0000$ & \texttt{configs/svm\_random\_translation.json} \\
+MLP & discrete    & 80 & 1800 & $1.0000$ & $1.0000$ & regime \texttt{discrete\_coin}, seed 0 \\
+MLP & continuous  & 80 & 1800 & $1.0000$ & $1.0000$ & regime \texttt{continuous\_coin}, seed 0 \\
+MLP & random tr.  & 80 & 1800 & $1.0000$ & $1.0000$ & regime \texttt{random\_translation}, seed 0 \\
+MLP & discrete    & 300 & 600 & $1.0000$ & $1.0000$ & regime \texttt{large\_lattice}, seed 0 \\
+CNN & ---         & --- & --- & ---      & ---      & not yet implemented \\
+\bottomrule
+\end{tabular}
+\caption{Phase-1 accuracies. All MLP rows: architecture $(400,200,100,50)$,
+$\alpha=0.001$, $P_{\max}=1$ normalization on, \texttt{random\_state}~$=0$,
+$80/20$ split, produced by \texttt{scripts/train\_mlp.py}. Windows are the
+placeholders recorded in that script's \texttt{REGIMES} table and are
+\emph{not} yet tuned.}
+\label{tab:phase1}
+\end{table}
+% <<< END BLOCK: table-phase1
+
+% >>> BLOCK: table-exponents
+\subsection{Phases 2--3 --- critical values and exponents}
+
+Empty until Phase 2 produces confusion points. Keep the column structure of
+Table~\ref{tab:paperA} so the two can be set side by side.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Method} & $\dthetac$ (discrete) & $\dthetac$ (continuous) & $\Prandc$ \\
+\midrule
+SVM    & --- & --- & --- \\
+MLP NN & --- & --- & --- \\
+CNN    & --- & --- & --- \\
+MoI    & --- & --- & --- \\
+Human  & --- & --- & --- \\
+IPR    & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\caption{This work. Exponents $\alpha$ in $\dthetac \sim N^{-\alpha}$, to be
+compared against Table~\ref{tab:paperA}. Each entry must carry the fit range
+in $N$, the training windows, and the seed.}
+\label{tab:exponents}
+\end{table}
+% <<< END BLOCK: table-exponents
+
+% =====================================================================
+\section{Observations and open questions}
+\label{sec:observations}
+% =====================================================================
+
+% >>> BLOCK: observations
+\begin{enumerate}
+
+\item \textbf{Ballistic versus diffusive spreading, measured.}
+Fitting $\MoI \sim N^{\alpha}$ over $N \in [8,300]$ gives
+$\alpha_{\mathrm{quantum}} = 1.996$ and $\alpha_{\mathrm{classical}} = 1.000$,
+against the expected $2$ and $1$. At $N=300$, $\theta=\pi/4$, the quantum
+walk gives $\MoI/N^{2} = 0.29290$, which is $1-1/\sqrt{2} = 0.29289$ to five
+digits --- the standard Hadamard-walk variance coefficient. This is a
+correctness check on the evolution code as much as a physics statement.
+\emph{Provenance:} \texttt{scripts/legacy\_classical\_walk.py}, defaults,
+seed 42.
+
+\item \textbf{Phase-1 accuracy saturates, so Phase-1 grid search is
+uninformative.}
+Every point of the $3\times 3$ architecture $\times$ $\alpha$ grid scores CV
+accuracy $1.0000$ with standard deviation $0$ on the \texttt{discrete\_coin}
+regime. Grid search cannot rank hyperparameters on a problem every
+hyperparameter solves. Tuning is only meaningful once there is a
+transition-regime score to select on --- which is Phase 2. This is a
+sequencing consequence, not a defect.
+
+\item \textbf{Where the two-class problem stops being trivial.}
+Squeezing the two training windows toward each other on
+\texttt{discrete\_coin} at $N=80$, test accuracy stays exactly $1.0000$ until
+the gap closes to roughly $\dtheta \in [0.22, 0.28]$, then falls
+($0.9917$ at a $[0,0.22]$ vs $[0.28,\theta_0]$ split, $0.9667$ at
+$[0,0.24]$ vs $[0.26,\theta_0]$).
+\provisional{This brackets the region the classifier cannot separate, near
+$\dtheta \approx 0.23$--$0.25$ at $N=80$. It is a Phase-1 diagnostic and is
+\emph{not} a measurement of $\dthetac$ --- the confusion-point rules of
+Sec.~\ref{sec:critical} have not been applied. Do not quote it as a critical
+value.}
+\emph{Provenance:} \texttt{scripts/train\_mlp.py}, 600 samples, seed 0,
+\texttt{random\_state}~$=0$.
+
+\item \textbf{On the squeezed windows, Paper~A's architecture does come out
+on top --- but not significantly.}
+Using the deliberately hard \texttt{stress} regime, the coarse grid ranks
+$(400,200,100,50)$ first at CV accuracy $0.9583 \pm 0.0106$, against
+$0.9542 \pm 0.0118$ for $(100,50)$. The error bars overlap almost completely,
+so this is consistent with Paper~A's choice but is not independent evidence
+for it. More folds or more seeds would be needed to say anything stronger.
+
+\item \textbf{The MLP's first-layer sensitivity respects the parity comb.}
+The per-site $\ell_2$ norm of the first-layer weights is near zero on the
+unreachable (identically zero) sites and largest near the ballistic edge,
+$|x| \approx 65$ at $N=80$. The network is keying on the edge of the light
+cone, which is the physically sensible feature. Note this is a
+\emph{sensitivity}, not a decision boundary --- the MLP is nonlinear, so
+unlike the linear SVM's weights it cannot be read directionally.
+
+\item \textbf{Open --- random translation is suspiciously easy so far.}
+The \texttt{random\_translation} regime scores $1.0000$ like everything else.
+At the extremes ($\Prand \approx 0$ versus $\Prand \approx 0.5$) that is
+expected and benign. The known failure mode is a transition-regime effect,
+driven by the three-peak structure of Sec.~\ref{sec:phenomenology}, so it
+cannot appear until Phase 2. Flagged here so that a clean Phase-1 number is
+not mistaken for the problem being absent.
+
+\end{enumerate}
+% <<< END BLOCK: observations
+
+% =====================================================================
+\section{Figure inventory}
+\label{sec:figures}
+% =====================================================================
+
+% >>> BLOCK: figures
+\begin{longtable}{p{0.40\textwidth} p{0.54\textwidth}}
+\toprule
+\textbf{File in \texttt{figures/}} & \textbf{Content} \\
+\midrule
+\endhead
+\texttt{Total\_probabilities.png}
+  & Hadamard QW, 300 steps, total $P(x)$; clean two-peak. \\
+\texttt{Spin\_probabilities.png}
+  & $P_+$ (blue solid) against $P_-$ (red dashed), 300 steps; peaks near
+    $x \approx \pm 210$, components avoid each other. \\
+\texttt{Pure\_Coin\_vs\_\_Random\_Coin.png}
+  & Pure against discrete-random and continuous-random coins, 300 steps. \\
+\texttt{Randoms\_vs\_\_Control.png}
+  & The above plus random translation, 300 steps. Defines the project's line
+    styles. \\
+\texttt{Peak\_spin\_updown\_theta\_vs\_distance.png}
+  & Peak spin-up position against coin angle $\theta \in [-\pi/2,\pi/2]$;
+    maximum $\approx 300$ at $\theta=0$, falling to $0$ at $\theta=\pm\pi/2$. \\
+\texttt{classical\_walk\_distribution.png}
+  & Classical binomial against pure QW at 300 steps, drawn on the reachable
+    sub-lattice, with an optional Monte Carlo overlay. \\
+\texttt{classical\_walk\_spreading.png}
+  & $\MoI$ against $N$, log--log; fitted slopes $1.996$ (quantum) and
+    $1.000$ (classical). \\
+\texttt{mlp\_stress\_coarse\_grid.png}
+  & MLP diagnostic panel: training classes, loss curve, first-layer
+    sensitivity, coarse-grid CV scores. Diagnostic regime --- not quotable. \\
+\bottomrule
+\end{longtable}
+% <<< END BLOCK: figures
+
+% =====================================================================
+\section*{Source papers}
+\addcontentsline{toc}{section}{Source papers}
+% =====================================================================
+
+\begin{thebibliography}{9}
+
+\bibitem{PaperA}
+C.~Mastandrea and C.-C.~Chien,
+\emph{Localization of quantum walks with classical randomness: Comparison
+between manual methods and supervised machine learning},
+Phys.\ Rev.\ E \textbf{108}, 035308 (2023).
+
+\bibitem{PaperB}
+C.~Mastandrea and C.-C.~Chien,
+\emph{Robustness and classical proxy of entanglement in variants of quantum
+walks},
+Phys.\ Rev.\ E \textbf{110}, 064124 (2024).
+
+\end{thebibliography}
+
+\end{document}
