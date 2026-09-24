@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """Train the SVM on one randomness channel and report what it learned.
 
-Thin entry point: parses args, loads the config, calls into ``src`` (CLAUDE.md
-Sec. 8). Phase 1 only -- this trains and scores on the two extreme regimes and
-deliberately does not touch the transition regime.
+Phase 1: the two extreme regimes only, never the transition regime.
 
-    python3 scripts/train_svm.py configs/svm_discrete_coin.json
-    python3 scripts/train_svm.py configs/svm_discrete_coin.json --plot
+    python3 scripts/train_svm.py configs/svm_discrete_coin.json [--plot]
 """
 
 from __future__ import annotations
@@ -31,8 +28,7 @@ def main() -> None:
     parser.add_argument("--plot", action="store_true", help="show weights and examples")
     parser.add_argument("--save", metavar="NAME", help="save the plot to figures/NAME.png")
     parser.add_argument("--overwrite", action="store_true")
-    # Overrides for quick exploration. Anything you intend to quote should go
-    # in a config file instead, so the run stays reproducible from it alone.
+    # Overrides for exploration only; anything you quote belongs in a config.
     parser.add_argument("--channel", help="override the config's channel")
     parser.add_argument("--n", type=int, help="override the lattice parameter")
     parser.add_argument("--n-samples", type=int, help="override the sample count")
@@ -112,11 +108,8 @@ def main() -> None:
     graded = int(np.sum((proba > 1e-9) & (proba < 1 - 1e-9)))
     print(f"\n|decision| range     [{np.abs(decision).min():.3f}, {np.abs(decision).max():.3f}]")
     print(f"graded predictions   {graded} / {len(proba)}")
-    print(
-        "  modified_huber saturates to exactly 0/1 outside |decision| >= 1, so on\n"
-        "  well-separated extremes almost everything is hard. The graded band is\n"
-        "  what Phase 2's confusion point is read from."
-    )
+    print("  (modified_huber saturates to 0/1 outside |decision| >= 1; the graded")
+    print("   band is what Phase 2 reads the confusion point from)")
 
     print("\nmost extreme test samples")
     for idx in (np.argmin(decision), np.argmax(decision)):

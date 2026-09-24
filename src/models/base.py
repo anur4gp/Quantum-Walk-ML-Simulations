@@ -1,13 +1,4 @@
-"""Shared classifier interface (CLAUDE.md Sec. 7).
-
-Every classifier -- SVM, MLP, CNN -- implements this same protocol so the
-critical-point extraction in Phase 2 can treat them interchangeably.
-
-``predict_proba`` returning genuine two-class probabilities is
-non-negotiable: the whole confusion-point method depends on it. That is why
-the SVM uses ``modified_huber`` loss rather than hinge, and why the CNN ends
-in a softmax.
-"""
+"""Shared classifier interface (CLAUDE.md Sec. 7)."""
 
 from __future__ import annotations
 
@@ -20,18 +11,15 @@ import numpy as np
 class Classifier(Protocol):
     """Two-class classifier over probability distributions.
 
-    ``X`` has shape ``(n_samples, n_sites)``; ``y`` has shape ``(n_samples,)``
-    with ``0 = delocalized`` and ``1 = localized``.
+    ``X`` is ``(n_samples, n_sites)``; ``y`` is 0 = delocalized, 1 = localized.
+    ``predict_proba`` must return genuine two-class probabilities -- the
+    confusion-point method in Sec. 7.4 depends on it.
     """
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
-        """Train on labelled distributions from the two extreme regimes."""
-        ...
+    def fit(self, X: np.ndarray, y: np.ndarray) -> None: ...
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """Class probabilities, shape ``(n_samples, 2)``, columns ``[P(0), P(1)]``."""
+        """Shape ``(n_samples, 2)``, columns ``[P(deloc), P(loc)]``."""
         ...
 
-    def score(self, X: np.ndarray, y: np.ndarray) -> float:
-        """Mean accuracy on ``(X, y)``."""
-        ...
+    def score(self, X: np.ndarray, y: np.ndarray) -> float: ...

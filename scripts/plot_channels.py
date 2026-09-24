@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """Plot P(x) for each randomness channel from a run config.
 
-Thin entry point: parses args, loads the config, calls into ``src``. No
-physics here (CLAUDE.md Sec. 8).
-
     python scripts/plot_channels.py configs/pure_vs_random.json [--save NAME]
 """
 

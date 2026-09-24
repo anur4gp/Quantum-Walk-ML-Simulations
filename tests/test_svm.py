@@ -1,9 +1,4 @@
-"""SVM classifier tests (CLAUDE.md Sec. 7.1).
-
-Validation order follows CLAUDE.md Sec. 1: synthetic / trivially separable data
-first, then real QW distributions from the far-delocalized and far-localized
-regimes.
-"""
+"""SVM classifier tests (CLAUDE.md Sec. 7.1): synthetic data first, then real walks."""
 
 from __future__ import annotations
 

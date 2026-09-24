@@ -1,35 +1,17 @@
 #!/usr/bin/env python3
-"""Train / tune the MLP on one randomness channel and look at the result.
+"""Train / tune the MLP on one randomness channel.
 
-Phase 1 only. This trains and scores on the two *extreme* regimes and
-deliberately never touches the transition regime (CLAUDE.md Sec. 1, Sec. 10).
+Phase 1: the two extreme regimes only, never the transition regime.
 
-Run it with no arguments and it does something useful:
+    python3 scripts/train_mlp.py [--regime NAME] [--all] [--plot]
+    python3 scripts/train_mlp.py --list                 # regimes and grids
+    python3 scripts/train_mlp.py --grid coarse [--cv 5] # GridSearchCV
+    python3 scripts/train_mlp.py --n 300 --alpha 0.01 --no-normalize
 
-    python3 scripts/train_mlp.py                        # DEFAULT_REGIME, train + report
-    python3 scripts/train_mlp.py --list                 # what regimes and grids exist
-    python3 scripts/train_mlp.py --regime continuous_coin
-    python3 scripts/train_mlp.py --regime discrete_coin --plot
-    python3 scripts/train_mlp.py --all                  # every regime, one summary table
-
-Hyperparameter tuning, via ``GridSearchCV`` (sklearn's exhaustive grid search):
-
-    python3 scripts/train_mlp.py --grid coarse
-    python3 scripts/train_mlp.py --regime random_translation --grid architecture --plot
-    python3 scripts/train_mlp.py --grid regularization --cv 5 --save-results runs/rt.json
-
-Ad-hoc overrides, for poking at one thing without editing anything:
-
-    python3 scripts/train_mlp.py --hidden 200,100,50 --alpha 0.01 --no-normalize
-    python3 scripts/train_mlp.py --n 300 --n-samples 400 --seed 7
-
-THE EDIT ZONE is ``REGIMES`` below, and ``PARAM_GRIDS`` in ``src/models/mlp.py``.
-Add a dict entry and it is immediately runnable by name -- nothing else to change.
-
-Reproducibility: everything printed is a function of (regime, grid, seed,
-random_state), all of which are echoed in the header. Anything you intend to
-quote should live in a named regime, not in a command-line override
-(CLAUDE.md Sec. 9, "Numerical claims need provenance").
+Regimes live in ``REGIMES`` below, grids in ``src/models/mlp.py``. Everything
+printed is a function of (regime, grid, seed, random_state), all echoed in the
+header; anything you intend to quote belongs in a named regime rather than a
+command-line override (CLAUDE.md Sec. 9).
 """
 
 from __future__ import annotations
@@ -37,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import textwrap
 import time
 import warnings
 from pathlib import Path
@@ -52,20 +35,12 @@ from models.mlp import PARAM_GRIDS, MLPClassifier  # noqa: E402
 
 PI = np.pi
 
-# ---------------------------------------------------------------------------
-# EDIT ZONE -- testing regimes
-# ---------------------------------------------------------------------------
-# A "regime" is one labelled two-class problem: a channel, a lattice size, and
-# the two control-parameter windows the classes are drawn from.
+# A regime is one labelled two-class problem: channel, lattice size, and the
+# two control-parameter windows the classes are drawn from.
 #
-# WINDOWS ARE PLACEHOLDERS, inherited verbatim from configs/svm_*.json. Window
-# selection is a research decision and a recorded *result*, not an
-# implementation detail (CLAUDE.md Sec. 6, Sec. 9) -- these are set far from
-# the transition so the two classes are unambiguous. Tune them with Dr. Chien
-# before quoting a number from any of them.
-#
-# The *_narrow / *_wide entries exist so window sensitivity is one flag away.
-# They are exploration, not paper values.
+# THE WINDOWS ARE PLACEHOLDERS from configs/svm_*.json. Choosing them is a
+# research decision and a recorded result (CLAUDE.md Sec. 6, Sec. 9); every
+# accuracy below is conditional on them.
 
 THETA_0 = PI / 6  # Paper A default (CLAUDE.md Sec. 2.1)
 
@@ -75,28 +50,28 @@ REGIMES: dict[str, dict] = {
         "n": 80,
         "window_delocalized": (0.0, 0.05),
         "window_localized": (0.45, THETA_0),
-        "note": "Paper A 'Jittered'. Control parameter delta_theta in [0, theta_0].",
+        "note": "Paper A 'Jittered'. delta_theta in [0, theta_0].",
     },
     "discrete_coin_narrow": {
         "channel": "discrete_coin",
         "n": 80,
         "window_delocalized": (0.0, 0.02),
         "window_localized": (0.50, THETA_0),
-        "note": "Narrower windows: less information per class, cleaner separation.",
+        "note": "Narrower windows: less information per class.",
     },
     "discrete_coin_wide": {
         "channel": "discrete_coin",
         "n": 80,
         "window_delocalized": (0.0, 0.15),
         "window_localized": (0.30, THETA_0),
-        "note": "Wider windows: risks eating into the transition regime. Watch accuracy fall.",
+        "note": "Wider windows: risks eating into the transition regime.",
     },
     "continuous_coin": {
         "channel": "continuous_coin",
         "n": 80,
         "window_delocalized": (0.0, 0.05),
         "window_localized": (0.45, THETA_0),
-        "note": "Paper A 'Uniform Jittered'. delta_theta_max, one-sided uniform draw.",
+        "note": "Paper A 'Uniform Jittered'. One-sided uniform draw each step.",
     },
     "random_translation": {
         "channel": "random_translation",
@@ -104,9 +79,8 @@ REGIMES: dict[str, dict] = {
         "window_delocalized": (0.0, 0.02),
         "window_localized": (0.45, 0.5),
         "note": (
-            "KNOWN-HARD CASE (CLAUDE.md Sec. 3). MLP/CNN systematically deviate here. "
-            "A suspiciously clean result means label leakage or a window that has "
-            "swallowed the transition -- be suspicious, not pleased."
+            "KNOWN-HARD CASE (CLAUDE.md Sec. 3). A clean result here means label "
+            "leakage or a window that swallowed the transition."
         ),
     },
     "stress": {
@@ -116,11 +90,9 @@ REGIMES: dict[str, dict] = {
         "window_delocalized": (0.0, 0.24),
         "window_localized": (0.26, THETA_0),
         "note": (
-            "DIAGNOSTIC ONLY, not a physics setting. The windows are squeezed until "
-            "they almost touch, which is the only way a Phase-1 grid search scores "
-            "anything other than 1.0000 -- see the note printed after a saturated "
-            "grid. These windows straddle the transition on purpose and would "
-            "corrupt any critical-value estimate; never quote a number from them."
+            "DIAGNOSTIC ONLY. Windows squeezed until they almost touch, the only "
+            "Phase-1 setting where a grid scores anything but 1.0000. They straddle "
+            "the transition, so never quote a number from them."
         ),
     },
     "quick": {
@@ -129,7 +101,7 @@ REGIMES: dict[str, dict] = {
         "n_samples": 400,
         "window_delocalized": (0.0, 0.05),
         "window_localized": (0.45, THETA_0),
-        "note": "Small and fast. For checking the plumbing, not for quoting.",
+        "note": "Small and fast; for checking the plumbing.",
     },
     "large_lattice": {
         "channel": "discrete_coin",
@@ -137,13 +109,13 @@ REGIMES: dict[str, dict] = {
         "n_samples": 600,
         "window_delocalized": (0.0, 0.05),
         "window_localized": (0.45, THETA_0),
-        "note": "Paper A kept the layer sizes fixed from N=80 to N=1000; this is the check.",
+        "note": "Paper A kept the layer sizes fixed from N=80 to N=1000; the check.",
     },
 }
 
 DEFAULT_REGIME = "discrete_coin"
 
-#: Defaults filled in for any key a regime does not override.
+#: Filled in for any key a regime does not override.
 REGIME_DEFAULTS: dict = {
     "theta_0": THETA_0,
     "parity": "odd",
@@ -154,9 +126,6 @@ REGIME_DEFAULTS: dict = {
     "normalize_pmax": True,  # P_max = 1 (Paper A, Sec. III B 4)
     "max_iter": 400,
 }
-
-
-# ---------------------------------------------------------------------------
 
 
 def resolve_regime(name: str, cfg_path: Path | None, args: argparse.Namespace) -> dict:
@@ -192,7 +161,7 @@ def resolve_regime(name: str, cfg_path: Path | None, args: argparse.Namespace) -
 
 
 def build_estimator(cfg: dict) -> MLPClassifier:
-    """An unfitted MLP with the regime's settings. Paper A values where unset."""
+    """Unfitted MLP with the regime's settings; Paper A values where unset."""
     kwargs: dict = {
         "normalize": cfg["normalize_pmax"],
         "max_iter": cfg["max_iter"],
@@ -205,7 +174,7 @@ def build_estimator(cfg: dict) -> MLPClassifier:
 
 
 def load_data(cfg: dict):
-    """Simulate the regime's dataset and split it 80/20, stratified."""
+    """Simulate the regime's dataset and split it, stratified."""
     t0 = time.perf_counter()
     ds = make_dataset(
         cfg["n"],
@@ -232,7 +201,7 @@ def print_header(cfg: dict) -> None:
     print("=" * 74)
     print(f"regime              {cfg['regime']}")
     if cfg.get("note"):
-        for line in _wrap(cfg["note"], 54):
+        for line in textwrap.wrap(cfg["note"], 54):
             print(f"                    {line}")
     print(f"channel             {cfg['channel']}")
     print(f"lattice             n={cfg['n']}  ({2 * cfg['n'] + 1} sites, {cfg['parity']})")
@@ -248,14 +217,8 @@ def print_header(cfg: dict) -> None:
     print("=" * 74)
 
 
-def _wrap(text: str, width: int) -> list[str]:
-    import textwrap
-
-    return textwrap.wrap(text, width) or [""]
-
-
 def report_fit(clf: MLPClassifier, split, cfg: dict) -> dict:
-    """Accuracies, confusion matrix, and how confident the network actually is."""
+    """Accuracies, confusion matrix, and how confident the network is."""
     X_train, X_test, y_train, y_test = split
     train_acc = clf.score(X_train, y_train)
     test_acc = clf.score(X_test, y_test)
@@ -277,12 +240,8 @@ def report_fit(clf: MLPClassifier, split, cfg: dict) -> dict:
     graded = int(np.sum((proba > 0.01) & (proba < 0.99)))
     print(f"\nP(deloc) in (0.01, 0.99)   {graded} / {len(proba)} test samples")
     print(f"mean |P(deloc) - 0.5|      {np.abs(proba - 0.5).mean():.4f}  (0.5 = fully confident)")
-    print(
-        "\n  Near-perfect accuracy on the two extreme regimes proves nothing except\n"
-        "  that the pipeline is not broken -- the classes are one-peak vs two-peak\n"
-        "  and trivially separable (Paper A, Sec. III B 1). The number that matters\n"
-        "  is the critical value from the transition regime, which is Phase 2."
-    )
+    print("\n  Near-perfect accuracy on the extremes shows only that the pipeline")
+    print("  works: the classes are one-peak vs two-peak (Paper A, Sec. III B 1).")
     return {"train_accuracy": train_acc, "test_accuracy": test_acc, "n_iter": clf.n_iter}
 
 
@@ -313,8 +272,7 @@ def run_grid(cfg: dict, split, grid_name: str, cv: int, n_jobs: int) -> tuple:
     )
     t0 = time.perf_counter()
     with warnings.catch_warnings():
-        # A non-converged fit is a legitimate grid point, not something to abort on;
-        # the n_iter column below is what flags it.
+        # A non-converged fit is a legitimate grid point; n_iter flags it.
         warnings.simplefilter("ignore", ConvergenceWarning)
         search.fit(X_train, y_train)
     print(f"  {'elapsed':<22}{time.perf_counter() - t0:.1f}s")
@@ -337,13 +295,9 @@ def run_grid(cfg: dict, split, grid_name: str, cv: int, n_jobs: int) -> tuple:
 
     spread = float(res["mean_test_score"].max() - res["mean_test_score"].min())
     if spread < 0.005:
-        print(
-            f"\n  CV accuracy spans only {spread:.4f} across the whole grid. On the two\n"
-            "  extreme regimes every reasonable architecture saturates, so this grid\n"
-            "  is not discriminating between them. Tuning here is not measuring\n"
-            "  anything; re-run the grid once Phase 2 has a transition-regime score\n"
-            "  to select on."
-        )
+        print(f"\n  CV accuracy spans only {spread:.4f} across the grid: every")
+        print("  architecture saturates on the extremes, so this is not measuring")
+        print("  anything. Re-run once Phase 2 gives a score to select on.")
     return search, {
         "grid": grid_name,
         "cv": cv,
@@ -357,7 +311,7 @@ def run_grid(cfg: dict, split, grid_name: str, cv: int, n_jobs: int) -> tuple:
 
 
 def plot(clf: MLPClassifier, ds, cfg: dict, search, args: argparse.Namespace) -> None:
-    """Training classes, loss curve, first-layer sensitivity, and grid scores."""
+    """Training classes, loss curve, first-layer sensitivity, grid scores."""
     import matplotlib.pyplot as plt
 
     from plotting.style import save_figure
@@ -387,8 +341,7 @@ def plot(clf: MLPClassifier, ds, cfg: dict, search, args: argparse.Namespace) ->
     ax.plot(positions, clf.input_weight_magnitude, color="black", linewidth=0.8)
     ax.set_xlabel("x")
     ax.set_ylabel(r"$\|W_1\|_2$ per site")
-    ax.set_title("first-layer sensitivity (not a decision boundary -- the MLP is nonlinear)",
-                 fontsize=9)
+    ax.set_title("first-layer sensitivity (not a decision boundary)", fontsize=9)
 
     if search is not None:
         ax = axes[3]
@@ -462,7 +415,7 @@ def main() -> None:
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--save-results", metavar="PATH", type=Path,
                         help="append the run record to a JSON file")
-    # Overrides. Anything you intend to quote belongs in a regime, not here.
+    # Overrides for exploration only; anything you quote belongs in a regime.
     parser.add_argument("--n", type=int)
     parser.add_argument("--n-samples", type=int)
     parser.add_argument("--seed", type=int)
@@ -483,7 +436,7 @@ def main() -> None:
                   f"samples={r.get('n_samples', REGIME_DEFAULTS['n_samples'])}")
             print(f"      windows {tuple(r['window_delocalized'])} vs "
                   f"{tuple(r['window_localized'])}")
-            for line in _wrap(r.get("note", ""), 66):
+            for line in textwrap.wrap(r.get("note", ""), 66):
                 print(f"      {line}")
             print()
         print("grids (src/models/mlp.py, PARAM_GRIDS):\n")

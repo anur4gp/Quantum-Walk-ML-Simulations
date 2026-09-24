@@ -1,23 +1,15 @@
-"""Sample generation and labelling for the two-class problem.
+"""Labelled sample generation for the two-class problem (CLAUDE.md Sec. 6).
 
-Data contract: CLAUDE.md Sec. 6.
+One sample is the final-time distribution of one walk realisation, shape
+``(2n+1,)`` on the Paper A odd lattice. Labels: 0 = delocalized (weak
+randomness), 1 = localized (strong). Never flipped.
 
-* One sample = the final-time probability distribution of one walk realisation,
-  shape ``(2N+1,)`` float64 on the Paper A odd lattice.
-* Labels: ``0 = delocalized`` (weak randomness), ``1 = localized`` (strong).
-  Never flipped.
-* Metadata travels with every sample: ``channel``, ``theta_0``, ``n``,
-  ``control_value``, ``seed``.
-* Default 1800 samples (Paper A found estimates stable from ~2000; more gave
-  no visible improvement).
+Samples leave here with the physical normalisation ``sum_x P(x) = 1``; the
+``P_max = 1`` ML normalisation is the classifier's job, so one flag covers
+training and inference (see :mod:`data.preprocess`).
 
-Samples are returned with the *physical* normalisation ``sum_x P(x) = 1``.
-The ``P_max = 1`` ML normalisation is applied by the classifier, not here, so
-that a single toggle covers both training and inference
-(see :mod:`data.preprocess`).
-
-NOT YET IMPLEMENTED: config-hash caching to ``data/*.npz`` with logged cache
-hits and misses. Every call below re-simulates from scratch.
+No caching yet -- every call re-simulates (CLAUDE.md Sec. 6 wants ``data/*.npz``
+keyed by a config hash).
 """
 
 from __future__ import annotations
@@ -31,8 +23,7 @@ from qw.operators import THETA_0_DEFAULT
 from qw.randomness import Channel
 from qw.walk import Parity, run_walk
 
-#: Paper A's sample count (CLAUDE.md Sec. 6).
-N_SAMPLES_DEFAULT: int = 1800
+N_SAMPLES_DEFAULT: int = 1800  # Paper A's value (CLAUDE.md Sec. 6)
 
 DELOCALIZED: int = 0
 LOCALIZED: int = 1
@@ -40,23 +31,12 @@ LOCALIZED: int = 1
 
 @dataclass(frozen=True)
 class Dataset:
-    """Labelled distributions plus the metadata needed to reproduce each one.
+    """Labelled distributions and the metadata that reproduces each one.
 
-    Attributes
-    ----------
-    X
-        Shape ``(n_samples, n_sites)`` float64. Each row sums to 1.
-    y
-        Shape ``(n_samples,)`` int. ``0 = delocalized``, ``1 = localized``.
-    control_values
-        The randomness strength each sample was drawn at.
-    seeds
-        Per-sample seed. ``run_walk(n, channel, theta_0, control_values[i],
-        seed=seeds[i])`` reproduces row ``i`` exactly.
-    window_delocalized, window_localized
-        The ``(low, high)`` control-parameter ranges the two classes were drawn
-        from. These are a *result*, not an implementation detail -- record them
-        with anything derived from this dataset (CLAUDE.md Sec. 6).
+    ``X`` is ``(n_samples, n_sites)`` with rows summing to 1; row ``i`` is
+    reproduced by ``run_walk(n, channel, theta_0, control_values[i],
+    seed=seeds[i])``. The two windows are recorded because they are a result,
+    not an implementation detail (CLAUDE.md Sec. 6).
     """
 
     X: np.ndarray
@@ -89,34 +69,13 @@ def make_dataset(
     seed: int = 0,
     parity: Parity = "odd",
 ) -> Dataset:
-    """Simulate a balanced two-class dataset from the two extreme regimes.
+    """Balanced two-class dataset from the two extreme regimes.
 
-    Half the samples are drawn with the control parameter uniform in
-    ``window_delocalized`` (label 0), half in ``window_localized`` (label 1).
-
-    The windows have no defaults on purpose. Too narrow and the classes carry
-    too little information about the configurations; too wide and
-    transition-regime data leaks into training and corrupts the critical-value
-    estimate. Choosing them is a research decision (CLAUDE.md Sec. 6, Sec. 9).
-
-    Parameters
-    ----------
-    n
-        Lattice parameter: ``2n+1`` sites on the odd (Paper A) lattice.
-    channel
-        Randomness channel. ``"pure"`` is rejected -- it has no control
-        parameter, so it cannot produce two classes.
-    window_delocalized, window_localized
-        ``(low, high)`` control-parameter ranges, inclusive of ``low``.
-    n_samples
-        Total samples across both classes. Rounded down to even.
-    seed
-        Master seed. Per-sample seeds are spawned from it, so the whole
-        dataset is reproducible from this one integer.
-
-    Returns
-    -------
-    Dataset
+    Half the samples draw the control parameter uniformly from
+    ``window_delocalized`` (label 0), half from ``window_localized`` (label 1).
+    The windows have no defaults: choosing them is a research decision
+    (CLAUDE.md Sec. 6, Sec. 9). ``n_samples`` is rounded down to even, and
+    per-sample seeds are spawned from ``seed``.
     """
     if channel == "pure":
         raise ValueError("channel 'pure' has no control parameter to sweep")
@@ -147,7 +106,6 @@ def make_dataset(
             np.full(per_class, LOCALIZED, dtype=int),
         ]
     )
-    # One independent, reproducible seed per realisation.
     seeds = np.array(
         [int(s.generate_state(1)[0]) for s in ss.spawn(2 * per_class)], dtype=np.int64
     )
@@ -184,23 +142,15 @@ def _check_control_range(
     window_localized: tuple[float, float],
     theta_0: float,
 ) -> None:
-    """Reject control values outside the range the channel is defined on.
-
-    Ranges are from CLAUDE.md Sec. 2.3:
-
-    * ``discrete_coin``   -- ``0 <= delta_theta <= theta_0``. Beyond ``theta_0``
-      one of the two coin angles goes negative, which is a different walk.
-    * ``continuous_coin`` -- ``delta_theta_max >= 0``.
-    * ``random_translation`` -- ``0 <= p_r <= 0.5``. Above 0.5 the walk is
-      mirror-symmetric to ``1 - p_r`` by parity, so a window there silently
-      duplicates one below it rather than extending the scan.
-    """
+    """Reject control values outside the channel's defined range (CLAUDE.md Sec. 2.3)."""
     low = min(window_delocalized[0], window_localized[0])
     high = max(window_delocalized[1], window_localized[1])
 
     limits: dict[Channel, tuple[float, float, str]] = {
+        # Beyond theta_0 one of the two discrete coin angles goes negative.
         "discrete_coin": (0.0, theta_0, "delta_theta must satisfy 0 <= x <= theta_0"),
         "continuous_coin": (0.0, np.inf, "delta_theta_max must satisfy x >= 0"),
+        # Above 0.5 a window silently duplicates one below it, by mirror symmetry.
         "random_translation": (
             0.0,
             0.5,

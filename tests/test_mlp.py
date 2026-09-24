@@ -1,10 +1,7 @@
 """MLP classifier tests (CLAUDE.md Sec. 7.2).
 
-Validation order follows CLAUDE.md Sec. 1: synthetic / trivially separable data
-first, then real QW distributions from the far-delocalized and far-localized
-regimes. The synthetic fixture is the same shape as the one in
-``test_svm.py`` -- one central peak vs. two symmetric peaks -- so the two
-classifiers are being asked the same question.
+Synthetic data first, then real walks. The synthetic fixture matches
+``test_svm.py``'s, so both classifiers are asked the same question.
 """
 
 from __future__ import annotations

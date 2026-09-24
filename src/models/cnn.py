@@ -1,15 +1,6 @@
-"""CNN classifier -- NOT YET IMPLEMENTED (Paper A, Sec. III B 3).
+"""CNN classifier -- NOT YET IMPLEMENTED.
 
-Spec, for when this is built (CLAUDE.md Sec. 7.3):
-
-* TensorFlow/Keras
-* four 1D convolutional layers; final dense layer, 2 neurons, softmax
-* filter counts scale with lattice size: layer 1 = 2N+1, then half, quarter,
-  eighth (round up)
-* kernel size 3 -- the lattice size is odd, so no padding is needed
-* dropout after each layer: 0.5, 0.5, then 0.2 on the final layer
-* loss ``SparseCategoricalCrossentropy``, 10 epochs
-* for random translation ONLY: L2 kernel regularisation lambda = 0.01 on every
-  layer, needed to control overfitting on the more varied distributions
-* retrained per lattice size (filter counts change); network *structure* fixed
+Spec: Paper A Sec. III B 3, restated in CLAUDE.md Sec. 7.3 (four 1D conv
+layers, dense softmax output, kernel size 3, dropout 0.5/0.5/0.2, filter
+counts scaling with 2N+1, L2 lambda=0.01 for random translation only).
 """

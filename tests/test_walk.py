@@ -1,7 +1,4 @@
-"""Walk-level tests: unitarity, known limits, determinism, symmetry.
-
-CLAUDE.md Sec. 8, "Testing".
-"""
+"""Walk-level tests: unitarity, known limits, determinism, symmetry (CLAUDE.md Sec. 8)."""
 
 from __future__ import annotations
 
@@ -11,7 +8,7 @@ import pytest
 from qw import observables as obs
 from qw import operators as ops
 from qw.randomness import CHANNELS, make_schedule
-from qw.walk import evolve, initial_state, lattice_positions, max_steps, run_walk
+from qw.walk import initial_state, lattice_positions, max_steps, run_walk
 
 TOL = 1e-12
 
@@ -50,12 +47,7 @@ def test_probability_conserved_at_every_step(
 
 
 def test_step_cap_is_exactly_tight() -> None:
-    """At max_steps the walker can *touch* the outermost sites but loses nothing.
-
-    The cap is what makes the open boundaries of `translate` harmless: after
-    `max_steps` steps the support has just saturated the lattice, so no
-    amplitude has been shifted off either end. One more step would leak.
-    """
+    """At max_steps the support just saturates the lattice; one more step would leak."""
     for parity in ("odd", "even"):
         r = run_walk(40, "random_translation", control_value=0.5, seed=1, parity=parity)
         assert obs.total_probability(r.psi_plus, r.psi_minus) == pytest.approx(
@@ -72,12 +64,7 @@ def test_n_steps_beyond_the_cap_is_rejected() -> None:
 
 
 def test_hadamard_walk_has_two_symmetric_ballistic_peaks() -> None:
-    """Pure walk, N = 300, theta = pi/4: the classic two-peak distribution.
-
-    Reference figure: figures/Total_probabilities.png. The ballistic peaks of
-    the Hadamard walk sit at x ~ +-N/sqrt(2) ~ +-212, matching
-    figures/Spin_probabilities.png.
-    """
+    """N = 300, theta = pi/4: peaks at x ~ +-N/sqrt(2), as in figures/Spin_probabilities.png."""
     n = 300
     r = run_walk(n, "pure", theta_0=np.pi / 4)
     p = obs.probability(r.psi_plus, r.psi_minus)
@@ -99,11 +86,7 @@ def test_hadamard_walk_has_two_symmetric_ballistic_peaks() -> None:
 
 
 def test_maximal_spreading_at_theta_multiple_of_pi() -> None:
-    """theta = n*pi: the coin is (+-) the identity, so both spins run free.
-
-    Reproduces the endpoints of figures/Peak_spin_updown_theta_vs_distance.png,
-    where the peak displacement is maximal (~N) at theta = 0.
-    """
+    """theta = n*pi: the coin is +-identity, so both spins run free (peak at ~N)."""
     n = 60
     for theta in (0.0, np.pi, -np.pi):
         r = run_walk(n, "pure", theta_0=theta)
@@ -114,14 +97,8 @@ def test_maximal_spreading_at_theta_multiple_of_pi() -> None:
 @pytest.mark.parametrize("theta", [np.pi / 2, -np.pi / 2, 3 * np.pi / 2])
 @pytest.mark.parametrize("n", [30, 31, 60, 61])
 def test_minimal_spreading_at_odd_multiples_of_half_pi(theta: float, n: int) -> None:
-    """theta = (2k+1)*pi/2: the coin swaps the spins, so the walker cannot spread.
-
-    The coin is purely off-diagonal, so each step relabels |+> <-> |-> and the
-    walker just oscillates between x = 0 and x = +-1 with period 2: MoI is 1
-    after an odd number of steps and 0 after an even one. Either way it stays
-    bounded by 1 instead of growing with N -- minimal spreading, the theta =
-    +-pi/2 endpoints of figures/Peak_spin_updown_theta_vs_distance.png.
-    """
+    """theta = (2k+1)*pi/2: the coin only swaps the spins, so the walker oscillates
+    between x = 0 and x = +-1 -- MoI is 1 after an odd step count, 0 after an even one."""
     r = run_walk(n, "pure", theta_0=theta)
     p = obs.probability(r.psi_plus, r.psi_minus)
     moi = obs.moment_of_inertia(p, r.positions)

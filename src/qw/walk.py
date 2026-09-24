@@ -1,20 +1,18 @@
-"""Evolution driver for the discrete-time quantum walk.
+"""Evolution driver: |psi(t)> = (T C)^N |psi_0> (CLAUDE.md Sec. 2.1).
 
 Lattice parity is an explicit parameter, never hardcoded (CLAUDE.md Sec. 2.2):
 
-===============  ==========================  ==================================
-                 ``parity="odd"`` (Paper A)  ``parity="even"`` (Paper B)
-===============  ==========================  ==================================
-sites            ``2N+1``, centred on x=0    ``2N``, no x=0
-positions        ``-N ... N``                ``-N ... -1, 1 ... N``
-initial state    ``(|0,+> + |0,->)/sqrt(2)`` ``sum_{x=+-1, s=+-} |x,s> / 2``
-max steps        ``N``                       ``N-1`` (conventional/symmetric)
-===============  ==========================  ==================================
+    odd  (Paper A): 2n+1 sites, -n..n, start (|0,+> + |0,->)/sqrt(2), n steps
+    even (Paper B): 2n sites, no x=0, start 1/2 on x=+-1 both spins, n-1 steps
 
-The current ML work uses the Paper A odd lattice with the conventional walk.
-The even lattice exists here because Paper B's symmetric and split-step
-translations are not unitary on a lattice with a central x=0 site; those two
-translation variants are themselves not yet implemented.
+The ML work uses the odd lattice with the conventional walk. The even lattice
+is here because Paper B's symmetric and split-step translations are not
+unitary on a lattice with a central site; those translations are not
+implemented yet.
+
+``run_walk`` keeps only the final state; ``run_walk_trajectory`` keeps the
+whole history P(x, t). Same driver, same schedule, same seed -- they differ
+only in what is stored.
 """
 
 from __future__ import annotations
@@ -31,11 +29,7 @@ Parity = Literal["odd", "even"]
 
 
 def lattice_positions(n: int, parity: Parity = "odd") -> np.ndarray:
-    """Physical position ``x`` of each array index, as a float64 array.
-
-    ``odd`` -> ``2n+1`` sites, ``-n ... n``.
-    ``even`` -> ``2n`` sites, ``-n ... -1, 1 ... n`` (no zero site).
-    """
+    """Physical position x of each array index: ``-n..n`` (odd), no zero (even)."""
     if parity == "odd":
         return np.arange(-n, n + 1, dtype=np.float64)
     if parity == "even":
@@ -46,20 +40,12 @@ def lattice_positions(n: int, parity: Parity = "odd") -> np.ndarray:
 
 
 def max_steps(n: int, parity: Parity = "odd") -> int:
-    """Largest step count for which no amplitude reaches the boundary.
-
-    CLAUDE.md Sec. 2.2: ``N`` on the odd lattice, ``N-1`` on the even lattice
-    for the conventional and symmetric walks.
-    """
+    """Largest step count with no amplitude at the boundary (CLAUDE.md Sec. 2.2)."""
     return n if parity == "odd" else n - 1
 
 
 def initial_state(n: int, parity: Parity = "odd") -> np.ndarray:
-    """Symmetric initial state for the chosen lattice parity.
-
-    Odd lattice (Paper A): ``(|0,+> + |0,->)/sqrt(2)``.
-    Even lattice (Paper B): equal weight ``1/2`` on ``x = +-1``, both spins.
-    """
+    """Symmetric initial state for the chosen parity (CLAUDE.md Sec. 2.2)."""
     positions = lattice_positions(n, parity)
     psi = np.zeros((positions.size, 2), dtype=np.complex128)
     if parity == "odd":
@@ -72,13 +58,7 @@ def initial_state(n: int, parity: Parity = "odd") -> np.ndarray:
 
 @dataclass(frozen=True)
 class WalkResult:
-    """Final state of one walk realisation, plus the metadata it was run with.
-
-    ``psi_plus`` / ``psi_minus`` are the complex amplitudes of the ``|x,+>``
-    and ``|x,->`` components; ``positions`` gives the physical ``x`` of each
-    entry. The metadata fields are the ones the data contract (CLAUDE.md
-    Sec. 6) requires to travel with every sample.
-    """
+    """Final state of one realisation, plus the metadata of CLAUDE.md Sec. 6."""
 
     psi_plus: np.ndarray
     psi_minus: np.ndarray
@@ -92,17 +72,12 @@ class WalkResult:
 
     @property
     def psi(self) -> np.ndarray:
-        """The state as a single ``(L, 2)`` array, columns ordered ``(+, -)``."""
+        """The state as one ``(L, 2)`` array, columns ``(+, -)``."""
         return np.stack([self.psi_plus, self.psi_minus], axis=1)
 
 
 def evolve(psi: np.ndarray, schedule: Schedule, phi1: float, phi2: float) -> np.ndarray:
-    r"""Apply ``(T C)^n`` for the coin angles and translations in ``schedule``.
-
-    One Python loop over *time steps*; the lattice is handled vectorised.
-    Evolution is :math:`|\psi(t)\rangle=(\hat T\hat C)^N|\psi_0\rangle`
-    (CLAUDE.md Sec. 2.1) -- coin first, then translation.
-    """
+    """Apply coin then translation once per entry in ``schedule``."""
     for theta, use_inverse in zip(schedule.thetas, schedule.inverse_translation):
         psi = ops.apply_coin(psi, ops.coin(theta, phi1, phi2))
         psi = ops.translate_inverse(psi) if use_inverse else ops.translate(psi)
@@ -121,29 +96,12 @@ def run_walk(
     phi1: float = ops.PHI_DEFAULT,
     phi2: float = ops.PHI_DEFAULT,
 ) -> WalkResult:
-    """Run one realisation of the walk and return its final state.
+    """Run one realisation and return its final state.
 
-    Parameters
-    ----------
-    n
-        Lattice parameter: ``2n+1`` sites (odd) or ``2n`` sites (even).
-    channel
-        Randomness channel, see :mod:`qw.randomness`.
-    theta_0
-        Base coin angle. Default ``pi/6`` (Paper A).
-    control_value
-        The channel's control parameter: ``delta_theta``,
-        ``delta_theta_max`` or ``p_r``. Ignored for ``"pure"``.
-    seed
-        Seed for this realisation's classical randomness. ``None`` is allowed
-        only for ``"pure"``, which draws nothing.
-    parity
-        Lattice parity, see module docstring.
-    n_steps
-        Number of time steps. Defaults to :func:`max_steps`, the largest value
-        that keeps the walker off the boundary.
-    phi1, phi2
-        Coin phases. Both default to ``pi/2``, as in both papers.
+    ``control_value`` is the channel's control parameter (delta_theta,
+    delta_theta_max or p_r) and is ignored for ``"pure"``. ``seed`` may be None
+    only for ``"pure"``, which draws nothing. ``n_steps`` defaults to
+    :func:`max_steps`.
     """
     steps = max_steps(n, parity) if n_steps is None else n_steps
     if steps > max_steps(n, parity):
@@ -159,6 +117,133 @@ def run_walk(
     return WalkResult(
         psi_plus=psi[:, ops.SPIN_UP],
         psi_minus=psi[:, ops.SPIN_DOWN],
+        positions=lattice_positions(n, parity),
+        n_steps=steps,
+        parity=parity,
+        channel=channel,
+        theta_0=float(theta_0),
+        control_value=float(control_value),
+        seed=seed,
+    )
+
+
+@dataclass(frozen=True)
+class TrajectoryResult:
+    """Whole evolution of one realisation. ``psi_t`` is ``(n_recorded, L, 2)``."""
+
+    psi_t: np.ndarray
+    times: np.ndarray
+    positions: np.ndarray
+    n_steps: int
+    parity: Parity
+    channel: Channel
+    theta_0: float
+    control_value: float
+    seed: int | None
+
+    @property
+    def probability(self) -> np.ndarray:
+        """P(x, t), shape ``(n_recorded, L)``. Each row sums to 1."""
+        from .observables import probability
+
+        return probability(self.psi_t[..., ops.SPIN_UP], self.psi_t[..., ops.SPIN_DOWN])
+
+    @property
+    def final(self) -> WalkResult:
+        """The last recorded slice as an ordinary :class:`WalkResult`."""
+        return WalkResult(
+            psi_plus=self.psi_t[-1, :, ops.SPIN_UP],
+            psi_minus=self.psi_t[-1, :, ops.SPIN_DOWN],
+            positions=self.positions,
+            n_steps=int(self.times[-1]),
+            parity=self.parity,
+            channel=self.channel,
+            theta_0=self.theta_0,
+            control_value=self.control_value,
+            seed=self.seed,
+        )
+
+
+def evolve_trajectory(
+    psi: np.ndarray,
+    schedule: Schedule,
+    phi1: float,
+    phi2: float,
+    *,
+    record_every: int = 1,
+    include_initial: bool = False,
+) -> tuple[np.ndarray, np.ndarray]:
+    """As :func:`evolve`, but returns ``(psi_t, times)`` with the kept states.
+
+    Unrecorded steps are still evolved, just not stored. ``include_initial``
+    adds the t=0 slice, which is the same for every realisation and so carries
+    no label information.
+    """
+    if record_every < 1:
+        raise ValueError(f"record_every must be >= 1, got {record_every}")
+
+    frames: list[np.ndarray] = []
+    times: list[int] = []
+    if include_initial:
+        frames.append(psi.copy())
+        times.append(0)
+
+    for step, (theta, use_inverse) in enumerate(
+        zip(schedule.thetas, schedule.inverse_translation), start=1
+    ):
+        psi = ops.apply_coin(psi, ops.coin(theta, phi1, phi2))
+        psi = ops.translate_inverse(psi) if use_inverse else ops.translate(psi)
+        if step % record_every == 0:
+            frames.append(psi.copy())
+            times.append(step)
+
+    if not frames:
+        raise ValueError(
+            f"record_every={record_every} recorded nothing from "
+            f"{schedule.n_steps} steps"
+        )
+    return np.asarray(frames, dtype=np.complex128), np.asarray(times, dtype=int)
+
+
+def run_walk_trajectory(
+    n: int,
+    channel: Channel = "pure",
+    theta_0: float = ops.THETA_0_DEFAULT,
+    control_value: float = 0.0,
+    *,
+    seed: int | None = None,
+    parity: Parity = "odd",
+    n_steps: int | None = None,
+    phi1: float = ops.PHI_DEFAULT,
+    phi2: float = ops.PHI_DEFAULT,
+    record_every: int = 1,
+    include_initial: bool = False,
+) -> TrajectoryResult:
+    """Run one realisation and keep its whole evolution.
+
+    Same schedule and same final state as :func:`run_walk` at the same seed.
+    """
+    steps = max_steps(n, parity) if n_steps is None else n_steps
+    if steps > max_steps(n, parity):
+        raise ValueError(
+            f"n_steps={steps} exceeds the boundary-free maximum "
+            f"{max_steps(n, parity)} for n={n}, parity={parity!r}"
+        )
+
+    rng = None if seed is None else np.random.default_rng(seed)
+    schedule = make_schedule(channel, steps, theta_0, control_value, rng)
+    psi_t, times = evolve_trajectory(
+        initial_state(n, parity),
+        schedule,
+        phi1,
+        phi2,
+        record_every=record_every,
+        include_initial=include_initial,
+    )
+
+    return TrajectoryResult(
+        psi_t=psi_t,
+        times=times,
         positions=lattice_positions(n, parity),
         n_steps=steps,
         parity=parity,

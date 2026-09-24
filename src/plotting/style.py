@@ -1,8 +1,7 @@
-"""Plot styling shared by every figure (CLAUDE.md Sec. 8, "Plotting").
+"""Shared figure conventions (CLAUDE.md Sec. 8, "Plotting").
 
-Line styles are keyed by randomness channel and match the existing reference
-figure ``figures/Randoms_vs__Control.png``. Keep them consistent -- the whole
-point is that figures from different runs can be laid side by side.
+Line styles are keyed by channel and match figures/Randoms_vs__Control.png, so
+figures from different runs can be laid side by side.
 """
 
 from __future__ import annotations
@@ -12,8 +11,7 @@ from typing import TypedDict
 
 import matplotlib.pyplot as plt
 
-#: Publication DPI floor (CLAUDE.md Sec. 8).
-DPI: int = 300
+DPI: int = 300  # publication floor
 
 FIGURES_DIR: Path = Path(__file__).resolve().parents[2] / "figures"
 
@@ -24,8 +22,7 @@ class ChannelStyle(TypedDict):
     linestyle: str
 
 
-#: Channel -> line style. ``label`` is the shorthand used in the existing
-#: figures (CLAUDE.md Sec. 4), not the formal name.
+#: ``label`` is the project shorthand of CLAUDE.md Sec. 4, not the formal name.
 CHANNEL_STYLE: dict[str, ChannelStyle] = {
     "pure": {"label": "Pure QW", "color": "blue", "linestyle": "solid"},
     "discrete_coin": {"label": "Jittered", "color": "red", "linestyle": "dashed"},
@@ -43,11 +40,7 @@ CHANNEL_STYLE: dict[str, ChannelStyle] = {
 
 
 def save_figure(fig: plt.Figure, name: str, *, overwrite: bool = False) -> Path:
-    """Save ``fig`` to ``figures/<name>.png`` at publication DPI.
-
-    Refuses to overwrite an existing figure unless ``overwrite=True``, so a
-    reference plot is never silently replaced (CLAUDE.md Sec. 8).
-    """
+    """Save to ``figures/<name>.png`` at publication DPI, refusing to overwrite."""
     FIGURES_DIR.mkdir(exist_ok=True)
     path = FIGURES_DIR / f"{name}.png"
     if path.exists() and not overwrite:

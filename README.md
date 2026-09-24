@@ -43,7 +43,7 @@ Python 3.11+. The stack is pinned to Paper A's (`numpy`, `scipy`, `matplotlib`,
 ## Running
 
 ```bash
-pytest                                                    # 117 tests
+pytest                                                    # 172 tests
 python scripts/plot_channels.py configs/pure_vs_random.json
 python scripts/plot_channels.py configs/pure_vs_random.json --save my_figure
 
@@ -56,6 +56,7 @@ python scripts/train_mlp.py --regime continuous_coin --plot
 python scripts/train_mlp.py --grid coarse                # exhaustive GridSearchCV
 python scripts/train_mlp.py --all                        # every regime, summary table
 
+python scripts/train_mlp_evolution.py --quick            # MLP on P(x,t), time-resolved
 python scripts/legacy_classical_walk.py                  # classical vs quantum reference
 ```
 
@@ -80,8 +81,9 @@ Phase 1 (classifiers in isolation) — see `CLAUDE.md` §10 for the checklist.
 | `src/models/svm.py` | done, tested — 100% on all three channels |
 | `src/models/mlp.py` | done, tested — 100% on all three channels; `GridSearchCV`-ready |
 | `src/data/generate.py` | labelling done, tested; **`.npz` caching not yet built** |
+| `src/data/evolution.py`, `src/analysis/critical.py` | done, tested — full-evolution samples and the Sec. 7.4 rules |
 | `src/models/cnn.py` | spec only, not implemented |
-| `src/analysis/` | later phases |
+| `src/analysis/scaling.py` | later phase |
 
 ## Conventions worth knowing before reading the code
 

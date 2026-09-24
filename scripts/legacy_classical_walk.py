@@ -1,52 +1,21 @@
 #!/usr/bin/env python3
-"""Classical unbiased random walk on 1D -- the diffusive baseline for the thesis.
+"""Classical unbiased random walk on 1D -- the diffusive baseline.
 
-Original scratch notes from ``scripts/legacy_classical_walk`` (kept verbatim):
+Self-contained on purpose: ``src/qw/`` is the quantum machinery and a classical
+walk shares none of it. This is a reference curve, not a dependency. It imports
+the quantum walk only for the side-by-side figure.
 
-    % add script for classical walk
-    % go to MLP next for classification and for parameter tuning --> scikit-learn
-    %   ExhaustiveGridSearch (GridSearchCV")
-    % write latex notes throughout
+It shows two things: P(x) after N steps (classical single peak vs the quantum
+two-peak), and MoI vs N (classical exactly N, quantum ~ N^2). That contrast is
+also why a localized quantum walk looks classical (CLAUDE.md Sec. 2.4).
 
-Why this is a ``legacy_*`` script and not a module in ``src/qw/``
-----------------------------------------------------------------
-``src/qw/`` is the *quantum* walk machinery -- complex amplitudes, coin
-operators, unitary evolution. A classical walk shares none of that. It is here
-purely as a reference curve: the thing the quantum walk is contrasted against
-in the write-up. Keeping it self-contained means it can never accidentally
-become a dependency of the physics or the ML pipeline.
+Only sites of the same parity as N are reachable, so plotting every site draws
+a comb. This plots the reachable sub-lattice by default; ``--all-sites``
+restores the comb of the older reference figures. Plotting choice only -- every
+observable is computed on the full lattice.
 
-The only thing it imports from ``src/`` is the quantum walk itself, for the
-side-by-side comparison figure.
-
-What it shows
--------------
-1. ``P(x)`` after ``N`` steps: classical Gaussian-like single peak vs. the
-   quantum two-peak ballistic distribution.
-2. Spreading: classical ``MoI = sum_x x^2 P(x) = N`` exactly (diffusive,
-   ``sigma ~ sqrt(N)``), quantum ``MoI ~ N^2`` (ballistic, ``sigma ~ N``).
-
-That contrast is the whole reason the quantum walk is interesting, and it is
-also the reason the *localized* quantum walk looks classical: strong classical
-randomness destroys the coherence that produces the two peaks, and the
-distribution collapses back toward this curve (CLAUDE.md Sec. 2.4).
-
-A note on the parity comb
--------------------------
-After ``N`` steps only sites with the same parity as ``N`` are reachable; the
-rest are exactly zero. Plotting every site therefore draws a comb -- that is
-what the existing reference figures (``figures/Total_probabilities.png``) do.
-For a *comparison* figure the comb hides the shape, so this script plots the
-reachable sub-lattice by default (the usual convention in the QW literature).
-Pass ``--all-sites`` to get the comb back and match the older figures.
-
-Usage
------
-    python3 scripts/legacy_classical_walk.py                    # both figures
-    python3 scripts/legacy_classical_walk.py --steps 300
-    python3 scripts/legacy_classical_walk.py --mc 20000         # overlay Monte Carlo
-    python3 scripts/legacy_classical_walk.py --all-sites        # comb convention
-    python3 scripts/legacy_classical_walk.py --save-prefix classical
+    python3 scripts/legacy_classical_walk.py [--steps 300] [--mc 20000]
+    python3 scripts/legacy_classical_walk.py [--all-sites] [--save-prefix NAME]
 """
 
 from __future__ import annotations
@@ -65,37 +34,20 @@ from qw.observables import probability  # noqa: E402
 from qw.operators import PHI_DEFAULT  # noqa: E402
 from qw.walk import lattice_positions, run_walk  # noqa: E402
 
-#: Line style for the classical curve. Deliberately kept local rather than
-#: added to ``plotting.style.CHANNEL_STYLE`` -- that dict is keyed by *quantum*
-#: randomness channel, and the classical walk is not one of them.
+#: Local, not in plotting.style.CHANNEL_STYLE: that dict is keyed by quantum
+#: randomness channel and the classical walk is not one of them.
 CLASSICAL_STYLE = {"label": "Classical RW", "color": "black", "linestyle": "dashed"}
 
-#: Hadamard-equivalent coin angle; the reference figures in ``figures/`` use it.
+#: Hadamard-equivalent coin angle, as in the reference figures.
 THETA_HADAMARD: float = np.pi / 4
 
 
-# ---------------------------------------------------------------------------
-# classical walk
-# ---------------------------------------------------------------------------
-
-
 def classical_exact(n_steps: int, p_right: float = 0.5) -> np.ndarray:
-    """Exact ``P(x)`` after ``n_steps`` steps, on the ``2*n_steps+1`` odd lattice.
+    """Exact P(x) after ``n_steps`` steps, on the same odd lattice as the QW.
 
-    A walker starting at ``x = 0`` and stepping ``+-1`` each time step is at
-    ``x = 2k - N`` after ``N`` steps having taken ``k`` right steps, so
-
-        P(x) = Binomial(N, p)[k]  with  k = (x + N) / 2.
-
-    Sites of the wrong parity are unreachable and get exactly ``0``. The
-    quantum walk has the same parity structure on the same lattice, so the two
-    curves are directly comparable site by site.
-
-    Returns
-    -------
-    ndarray
-        Shape ``(2*n_steps+1,)`` float64, summing to 1. Index ``i`` is position
-        ``x = i - n_steps`` (matches ``qw.walk.lattice_positions``).
+    After N steps with k right steps the walker is at x = 2k - N, so
+    P(x) = Binomial(N, p)[(x + N) / 2]; wrong-parity sites are exactly 0. No
+    sampling noise, and directly comparable to the quantum curve site by site.
     """
     x = lattice_positions(n_steps, "odd")
     prob = np.zeros(x.size, dtype=np.float64)
@@ -108,11 +60,9 @@ def classical_exact(n_steps: int, p_right: float = 0.5) -> np.ndarray:
 def classical_monte_carlo(
     n_steps: int, n_walkers: int, rng: np.random.Generator, p_right: float = 0.5
 ) -> np.ndarray:
-    """Monte Carlo estimate of the same distribution, for a sanity overlay.
+    """Monte Carlo estimate of the same distribution, as a sanity overlay.
 
-    Vectorised over walkers; the only loop-shaped thing is the cumulative sum
-    over steps. Converges to :func:`classical_exact` as ``n_walkers`` grows,
-    which is the point of plotting it.
+    Converges to :func:`classical_exact` as ``n_walkers`` grows.
     """
     steps = rng.choice(np.array([-1, 1]), size=(n_walkers, n_steps), p=[1 - p_right, p_right])
     final = steps.sum(axis=1)
@@ -126,19 +76,9 @@ def moment_of_inertia(prob: np.ndarray, positions: np.ndarray) -> float:
 
 
 def reachable_mask(n_steps: int) -> np.ndarray:
-    """Boolean mask of the sites a walker can occupy after ``n_steps`` steps.
-
-    Every step changes ``x`` by exactly ``+-1``, so ``x`` and ``N`` always have
-    the same parity and half the lattice is identically zero. Masking is a
-    *plotting* choice only -- all observables are computed on the full lattice.
-    """
+    """Sites reachable after ``n_steps`` steps: x and N share parity."""
     x = lattice_positions(n_steps, "odd").astype(np.int64)
     return (x + n_steps) % 2 == 0
-
-
-# ---------------------------------------------------------------------------
-# figures
-# ---------------------------------------------------------------------------
 
 
 def figure_distribution(
@@ -161,7 +101,7 @@ def figure_distribution(
     )
     p_quantum = probability(qw.psi_plus, qw.psi_minus)
 
-    # Observables above use the full lattice; the mask is for legibility only.
+    # The mask is for legibility; the observables above use the full lattice.
     keep = np.ones(positions.size, dtype=bool) if all_sites else reachable_mask(n_steps)
 
     fig, ax = plt.subplots(figsize=(8, 5))
