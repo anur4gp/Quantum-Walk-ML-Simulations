@@ -1,14 +1,3 @@
-"""Confusion-point extraction (CLAUDE.md Sec. 7.4).
-
-The rule is asymmetric by classifier and deliberately so: the SVM uses maximal
-confusion, the MLP and CNN the first point where P(deloc) drops below 0.5,
-because they jump rather than crossing over gradually.
-
-Each rule reads ``P(delocalized)`` sampled along a generic ascending ``axis``,
-which may be the randomness strength (Paper A) or the time step (the
-time-resolved use).
-"""
-
 from __future__ import annotations
 
 import numpy as np

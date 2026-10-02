@@ -98,3 +98,12 @@ Phase 1 (classifiers in isolation) — see `CLAUDE.md` §10 for the checklist.
   covers both training and inference.
 - Training windows have no defaults. They are a recorded result, not an
   implementation detail — the ones in `configs/svm_*.json` are placeholders.
+
+
+do log log for t and delta theta
+- ideally loglog has straight negative line
+
+look at curvature for top left graph - find reason for gradual increase
+
+CNN - look at tenserflow
+- chris tried geometric sequencing for nodes/layer
