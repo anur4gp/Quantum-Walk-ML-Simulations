@@ -73,8 +73,8 @@ def make_dataset(
 
     Half the samples draw the control parameter uniformly from
     ``window_delocalized`` (label 0), half from ``window_localized`` (label 1).
-    The windows have no defaults: choosing them is a research decision
-    (CLAUDE.md Sec. 6, Sec. 9). ``n_samples`` is rounded down to even, and
+    
+     ``n_samples`` is rounded down to even, and
     per-sample seeds are spawned from ``seed``.
     """
     if channel == "pure":
